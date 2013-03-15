@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2003-2005, Jeremiah Fincher
-# Copyright (c) 2010, James Vega
+# Copyright (c) 2010, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -40,7 +40,6 @@ class InternetTestCase(PluginTestCase):
 
         def testWhois(self):
             self.assertNotError('internet whois ohio-state.edu')
-            self.assertNotError('internet whois kuro5hin.org')
             self.assertNotError('internet whois microsoft.com')
             self.assertNotError('internet whois inria.fr')
             self.assertNotError('internet whois slime.com.au')

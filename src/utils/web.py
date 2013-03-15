@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2002-2005, Jeremiah Fincher
-# Copyright (c) 2009, James Vega
+# Copyright (c) 2009, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -178,6 +178,9 @@ class HtmlToText(HTMLParser, object):
 
     def handle_data(self, data):
         self.data.append(data)
+
+    def handle_entityref(self, data):
+        self.data.append(chr(htmlentitydefs.name2codepoint[data]))
 
     def getText(self):
         text = ''.join(self.data).strip()

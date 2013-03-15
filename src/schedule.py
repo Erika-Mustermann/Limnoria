@@ -71,8 +71,8 @@ class Schedule(drivers.IrcDriver):
             self.events.clear()
             self.schedule[:] = []
         # We don't reset the counter here because if someone has held an id of
-        # one of the nuked events, we don't want him removing new events with
-        # his old id.
+        # one of the nuked events, we don't want him/her removing new events with
+        # his/her old id.
 
     def name(self):
         return 'Schedule'
@@ -109,11 +109,11 @@ class Schedule(drivers.IrcDriver):
         f = self.removeEvent(name)
         self.addEvent(f, t, name=name)
 
-    def addPeriodicEvent(self, f, t, name=None, now=True):
+    def addPeriodicEvent(self, f, t, name=None, now=True, args=[], kwargs={}):
         """Adds a periodic event that is called every t seconds."""
         def wrapper():
             try:
-                f()
+                f(*args, **kwargs)
             finally:
                 # Even if it raises an exception, let's schedule it.
                 return self.addEvent(wrapper, time.time() + t, name)

@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2002-2005, Jeremiah Fincher
-# Copyright (c) 2009, James Vega
+# Copyright (c) 2009, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -77,7 +77,7 @@ class ConfigTestCase(ChannelPluginTestCase):
         self.assertRegexp('config supybot.replies.', 'not a valid')
         self.assertRegexp('config supybot.repl', 'not a valid')
         self.assertRegexp('config supybot.reply.withNickPrefix 123',
-                          'True or False')
+                          'True or False.*, not \'123\'.')
         self.assertRegexp('config supybot.replies foo', 'settable')
 
 # vim:set shiftwidth=4 softtabstop=4 expandtab textwidth=79:

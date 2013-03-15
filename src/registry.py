@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2004-2005, Jeremiah Fincher
-# Copyright (c) 2009-2010, James Vega
+# Copyright (c) 2009-2010, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -32,12 +32,15 @@ import re
 import os
 import sys
 import time
+import json
 import codecs
 import string
 import textwrap
 
 import supybot.utils as utils
 import supybot.i18n as i18n
+
+_ = i18n.PluginInternationalization()
 
 def error(s):
    """Replace me with something better from another module!"""
@@ -307,6 +310,9 @@ class Group(object):
             L = [(split(s)[-1], node) for (s, node) in L]
         return L
 
+class _NoValueGiven:
+    # Special value for Value.error()
+    pass
 
 class Value(Group):
     """Invalid registry value.  If you're getting this message, report it,
@@ -322,8 +328,13 @@ class Value(Group):
         if setDefault:
             self.setValue(default)
 
-    def error(self):
-        if self.__doc__:
+    def error(self, value=_NoValueGiven):
+        if hasattr(self, 'errormsg') and value is not _NoValueGiven:
+            try:
+                s = self.errormsg % value
+            except TypeError:
+                s = self.errormsg
+        elif self.__doc__:
             s = self.__doc__
         else:
             s = """%s has no docstring.  If you're getting this message,
@@ -360,6 +371,18 @@ class Value(Group):
         for callback, args, kwargs in self._callbacks:
             callback(*args, **kwargs)
 
+    def context(self, value):
+        """Return a context manager object, which sets this variable to a
+        temporary value, and set the previous value back when exiting the
+        context."""
+        class Context:
+            def __enter__(self2):
+                self2._old_value = self.value
+                self.setValue(value)
+            def __exit__(self2, exc_type, exc_value, traceback):
+                self.setValue(self2._old_value)
+        return Context()
+
     def addCallback(self, callback, *args, **kwargs):
         """Add a callback to the list. A callback is a function that will be
         called when the value is changed. You can give this function as many
@@ -387,6 +410,7 @@ class Value(Group):
 
 class Boolean(Value):
     """Value must be either True or False (or On or Off)."""
+    errormsg = _('Value must be either True or False (or On or Off), not %r.')
     def set(self, s):
         try:
             v = utils.str.toBool(s)
@@ -394,7 +418,7 @@ class Boolean(Value):
             if s.strip().lower() == 'toggle':
                 v = not self.value
             else:
-                self.error()
+                self.error(s)
         self.setValue(v)
 
     def setValue(self, v):
@@ -402,50 +426,58 @@ class Boolean(Value):
 
 class Integer(Value):
     """Value must be an integer."""
+    errormsg = _('Value must be an integer, not %r.')
     def set(self, s):
         try:
             self.setValue(int(s))
         except ValueError:
-            self.error()
+            self.error(s)
 
 class NonNegativeInteger(Integer):
     """Value must be a non-negative integer."""
+    errormsg = _('Value must be a non-negative integer, not %r.')
     def setValue(self, v):
         if v < 0:
-            self.error()
+            self.error(v)
         super(NonNegativeInteger, self).setValue(v)
 
 class PositiveInteger(NonNegativeInteger):
     """Value must be positive (non-zero) integer."""
+    errormsg = _('Value must be positive (non-zero) integer, not %r.')
     def setValue(self, v):
         if not v:
-            self.error()
+            self.error(v)
         super(PositiveInteger, self).setValue(v)
 
 class Float(Value):
     """Value must be a floating-point number."""
+    errormsg = _('Value must be a floating-point number, not %r.')
     def set(self, s):
         try:
             self.setValue(float(s))
         except ValueError:
-            self.error()
+            self.error(s)
 
     def setValue(self, v):
         try:
             super(Float, self).setValue(float(v))
         except ValueError:
-            self.error()
+            self.error(v)
 
 class PositiveFloat(Float):
     """Value must be a floating-point number greater than zero."""
+    errormsg = _('Value must be a floating-point number greater than zero, '
+            'not %r.')
     def setValue(self, v):
         if v <= 0:
-            self.error()
+            self.error(v)
         else:
             super(PositiveFloat, self).setValue(v)
 
 class Probability(Float):
     """Value must be a floating point number in the range [0, 1]."""
+    errormsg = _('Value must be a floating point number in the range [0, 1], '
+            'not %r.')
     def __init__(self, *args, **kwargs):
         self.__parent = super(Probability, self)
         self.__parent.__init__(*args, **kwargs)
@@ -454,22 +486,24 @@ class Probability(Float):
         if 0 <= v <= 1:
             self.__parent.setValue(v)
         else:
-            self.error()
+            self.error(v)
 
 class String(Value):
     """Value is not a valid Python string."""
+    errormsg = _('Value is not a valid Python string, not %r.')
     def set(self, s):
-        if not s:
-            s = '""'
-        elif s[0] != s[-1] or s[0] not in '\'"':
-            s = repr(s)
+        v = s
+        if not v:
+            v = '""'
+        elif v[0] != v[-1] or v[0] not in '\'"':
+            v = repr(v)
         try:
-            v = utils.safeEval(s)
+            v = utils.safeEval(v)
             if not isinstance(v, basestring):
                 raise ValueError
             self.setValue(v)
         except ValueError: # This catches utils.safeEval(s) errors too.
-            self.error()
+            self.error(s)
 
     _printable = string.printable[:-4]
     def _needsQuoting(self, s):
@@ -488,7 +522,9 @@ class OnlySomeStrings(String):
                                   'This is a bug.'
         self.__parent = super(OnlySomeStrings, self)
         self.__parent.__init__(*args, **kwargs)
-        self.__doc__ = format('Valid values include %L.',
+        self.__doc__ = format(_('Valid values include %L.'),
+                              map(repr, self.validStrings))
+        self.errormsg = format(_('Valid values include %L, not %%r.'),
                               map(repr, self.validStrings))
 
     def help(self):
@@ -505,11 +541,11 @@ class OnlySomeStrings(String):
         return self.validStrings[i]
 
     def setValue(self, s):
-        s = self.normalize(s)
+        v = self.normalize(s)
         if s in self.validStrings:
-            self.__parent.setValue(s)
+            self.__parent.setValue(v)
         else:
-            self.error()
+            self.error(v)
 
 class NormalizedString(String):
     def __init__(self, default, *args, **kwargs):
@@ -559,6 +595,7 @@ class StringWithSpaceOnRight(String):
 
 class Regexp(Value):
     """Value must be a valid regular expression."""
+    errormsg = _('Value must be a valid regular expression, not %r.')
     def __init__(self, *args, **kwargs):
         kwargs['setDefault'] = False
         self.sr = ''
@@ -664,6 +701,29 @@ class TemplatedString(String):
         if utils.iter.all(hasTemplate, self.requiredTemplates):
             self.__parent.setValue(v)
         else:
-            self.error()
+            self.error(v)
+
+class Json(String):
+    # Json-serializable data
+    def set(self, v):
+        self.setValue(json.loads(v))
+    def setValue(self, v):
+        super(Json, self).setValue(json.dumps(v))
+    def __call__(self):
+        return json.loads(super(Json, self).__call__())
+
+    class _Context:
+        def __init__(self, var):
+            self._var = var
+        def __enter__(self):
+            self._dict = self._var()
+            return self._dict
+        def __exit__(self, *args):
+            self._var.setValue(self._dict)
+
+    def editable(self):
+        """Return an editable dict usable within a 'with' statement and
+        committed to the configuration variable at the end."""
+        return self._Context(self)
 
 # vim:set shiftwidth=4 softtabstop=4 expandtab textwidth=79:

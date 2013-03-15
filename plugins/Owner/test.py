@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2002-2005, Jeremiah Fincher
-# Copyright (c) 2009, James Vega
+# Copyright (c) 2009, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -28,6 +28,14 @@
 # POSSIBILITY OF SUCH DAMAGE.
 ###
 
+import sys
+
+if sys.version_info >= (2, 7, 0):
+    from unittest import skip
+else:
+    # Workaround
+    def skip(string):
+        return lambda x:None
 from supybot.test import *
 
 import supybot.conf as conf
@@ -84,6 +92,16 @@ class OwnerTestCase(PluginTestCase):
     def testRename(self):
         self.assertError('rename Admin join JOIN')
         self.assertError('rename Admin join jo-in')
+        self.assertNotError('rename Admin join testcommand')
+        self.assertRegexp('list Admin', 'testcommand')
+        self.assertNotRegexp('list Admin', 'join')
+        self.assertError('help join')
+        self.assertRegexp('help testcommand', 'Tell the bot to join')
+        self.assertRegexp('join', 'not a valid command')
+        self.assertHelp('testcommand')
+
+    @skip('Nested commands cannot be renamed yet.')
+    def testRenameNested(self):
         self.assertNotError('rename Admin "capability remove" rmcap')
         self.assertNotRegexp('list Admin', 'capability remove')
         self.assertRegexp('list Admin', 'rmcap')

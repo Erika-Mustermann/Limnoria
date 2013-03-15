@@ -33,6 +33,7 @@ Supybot internationalisation and localisation managment.
 
 __all__ = ['PluginInternationalization', 'internationalizeDocstring']
 
+import os
 import re
 import sys
 import time
@@ -68,6 +69,7 @@ def import_conf():
     conf.registerGlobalValue(conf.supybot, 'language',
         conf.registry.String(currentLocale, """Determines the bot's default
         language. Valid values are things like en, fr, de, etc."""))
+    conf.supybot.language.addCallback(reloadLocalesIfRequired)
 
 def getPluginDir(plugin_name):
     """Gets the directory of the given plugin"""
@@ -97,10 +99,11 @@ def getLocalePath(name, localeName, extension):
     """Gets the path of the locale file of the given plugin ('supybot' stands
     for the core)."""
     if name != 'supybot':
-        directory = getPluginDir(name) + 'locale'
+        base = getPluginDir(name)
     else:
-        import ansi # Any Supybot plugin could fit
-        directory = ansi.__file__[0:-len('ansi.pyc')] + 'locale'
+        from . import ansi # Any Supybot plugin could fit
+        base = ansi.__file__[0:-len('ansi.pyc')]
+    directory = os.path.join(base, 'locales')
     return '%s/%s.%s' % (directory, localeName, extension)
 
 i18nClasses = {}
@@ -118,8 +121,8 @@ def reloadLocalesIfRequired():
 def reloadLocales():
     for pluginName in i18nClasses:
         i18nClasses[pluginName].loadLocale()
-    for commandHash in internationalizedCommands:
-        internationalizeDocstring(internationalizedCommands[commandHash])
+    for command in internationalizedCommands.values():
+        internationalizeDocstring(command)
     for function in internationalizedFunctions:
         function.loadLocale()
 
@@ -136,12 +139,14 @@ class _PluginInternationalization:
     """Internationalization managment for a plugin."""
     def __init__(self, name='supybot'):
         self.name = name
+        self.translations = {}
         self.currentLocaleName = None
         i18nClasses.update({name: self})
         self.loadLocale()
 
     def loadLocale(self, localeName=None):
         """(Re)loads the locale used by this class."""
+        self.translations = {}
         if localeName is None:
             localeName = currentLocale
         self.currentLocaleName = localeName
@@ -156,8 +161,9 @@ class _PluginInternationalization:
                 translationFile = open(getLocalePath(self.name,
                                                      localeName, 'po'), 'r')
             self._parse(translationFile)
-        except IOError, PluginNotFound: # The translation is unavailable
-            self.translations = {}
+        except (IOError, PluginNotFound): # The translation is unavailable
+            pass
+
     def _parse(self, translationFile):
         """A .po files parser.
 
@@ -228,7 +234,7 @@ class _PluginInternationalization:
     def __call__(self, untranslated):
         """Main function.
 
-        his is the function which is called when a plugin runs _()"""
+        This is the function which is called when a plugin runs _()"""
         if untranslated.__class__ == internationalizedString:
             return untranslated._original
         escapedUntranslated = self._unescape(untranslated, True)
@@ -314,7 +320,7 @@ class _PluginInternationalization:
 class internationalizedFunction:
     """Proxy for functions that need to be fully localized.
 
-    The localization code is in locale/LOCALE.py"""
+    The localization code is in locales/LOCALE.py"""
     def __init__(self, internationalizer, name, function):
         self._internationalizer = internationalizer
         self._name = name

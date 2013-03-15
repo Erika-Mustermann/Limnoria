@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2002-2005, Jeremiah Fincher
-# Copyright (c) 2009,2011, James Vega
+# Copyright (c) 2009,2011, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -241,6 +241,10 @@ def separateModes(args):
             else:
                 requireArguments = _minusRequireArguments
             if c in requireArguments:
+                if not args:
+                    # It happens, for example with "MODE #channel +b", which
+                    # is used for getting the list of all bans.
+                    continue
                 arg = args.pop(0)
                 try:
                     arg = int(arg)
@@ -457,6 +461,7 @@ def wrap(s, length, break_on_hyphens = False, break_long_words = False):
 
 def isValidArgument(s):
     """Returns whether s is strictly a valid argument for an IRC message."""
+
     return '\r' not in s and '\n' not in s and '\x00' not in s
 
 def safeArgument(s):
@@ -504,7 +509,7 @@ class IrcString(str):
     """This class does case-insensitive comparison and hashing of nicks."""
     def __new__(cls, s=''):
         x = super(IrcString, cls).__new__(cls, s)
-        x.lowered = toLower(x)
+        x.lowered = str(toLower(x))
         return x
 
     def __eq__(self, s):

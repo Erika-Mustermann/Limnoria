@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2002-2005, Jeremiah Fincher
-# Copyright (c) 2009-2010, James Vega
+# Copyright (c) 2009-2010, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -351,7 +351,9 @@ def validChannel(irc, msg, args, state):
         state.errorInvalid(_('channel'), args[0])
 
 def getHostmask(irc, msg, args, state):
-    if ircutils.isUserHostmask(args[0]):
+    if ircutils.isUserHostmask(args[0]) or \
+            (not conf.supybot.protocols.irc.strictRfc() and
+                    args[0].startswith('$')):
         state.args.append(args.pop(0))
     else:
         try:
@@ -1037,6 +1039,13 @@ def wrap(f, specList=[], name=None, **kw):
                                'function ;)')
                 raise
     return utils.python.changeFunctionName(newf, name, f.__doc__)
+wrap.__doc__ = """Useful wrapper for plugin commands.
+
+Valid converters are: %s.
+
+:param f: A command, taking (self, irc, msg, args, ...) as arguments
+:param specList: A list of converters and contexts""" % \
+        ', '.join(sorted(wrappers.keys()))
 
 __all__ = [
     # Contexts.

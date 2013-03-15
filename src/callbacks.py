@@ -1,6 +1,7 @@
+# -*- coding: utf8 -*-
 ###
 # Copyright (c) 2002-2005, Jeremiah Fincher
-# Copyright (c) 2008-2010, James Vega
+# Copyright (c) 2008-2010, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -39,10 +40,18 @@ import sys
 import copy
 import time
 import shlex
+import codecs
 import getopt
 import inspect
 import operator
-from cStringIO import StringIO
+
+if sys.version_info[0] < 3:
+    # cStringIO is buggy with Python 2.6 (
+    # see http://paste.progval.net/show/227/ )
+    # and it does not handle unicode objects in Python  2.x
+    from StringIO import StringIO
+else:
+    from cStringIO import StringIO
 
 import supybot.log as log
 import supybot.conf as conf
@@ -284,8 +293,25 @@ class Tokenizer(object):
     def _handleToken(self, token):
         if token[0] == token[-1] and token[0] in self.quotes:
             token = token[1:-1]
-            encoding_prefix = 'string' if sys.version_info[0]<3 else 'unicode'
-            token = token.encode().decode(encoding_prefix + '_escape')
+            # FIXME: No need to tell you this is a hack.
+            # It has to handle both IRC commands and serialized configuration.
+            #
+            # Whoever you are, if you make a single modification to this
+            # code, TEST the code with Python 2 & 3, both with the unit
+            # tests and on IRC with this: @echo "好"
+            if sys.version_info[0] < 3:
+                try:
+                    token = token.encode('utf8').decode('string_escape')
+                    token = token.decode('utf8')
+                except:
+                    token = token.decode('string_escape')
+            else:
+                token = codecs.getencoder('utf8')(token)[0]
+                token = codecs.getdecoder('unicode_escape')(token)[0]
+                try:
+                    token = token.encode('iso-8859-1').decode()
+                except: # Prevent issue with tokens like '"\\x80"'.
+                    pass
         return token
 
     def _insideBrackets(self, lexer):
@@ -483,18 +509,18 @@ class RichReplyMethods(object):
         if isinstance(capability, basestring): # checkCommandCapability!
             log.warning('Denying %s for lacking %q capability.',
                         self.msg.prefix, capability)
-            if not self._getConfig(conf.supybot.reply.error.noCapability):
-                if capability in conf.supybot.capabilities.private():
-                    v = self._getConfig(conf.supybot.replies.genericNoCapability)
-                else:
-                    v = self._getConfig(conf.supybot.replies.noCapability)
-                    v %= capability
-                s = self.__makeReply(v, s)
-                return self._error(s, **kwargs)
+            # noCapability means "don't send a specific capability error
+            # message" not "don't send a capability error message at all", like
+            # one would think
+            if self._getConfig(conf.supybot.reply.error.noCapability) or \
+                capability in conf.supybot.capabilities.private():
+                v = self._getConfig(conf.supybot.replies.genericNoCapability)
             else:
-                log.debug('Not sending capability error, '
-                          'supybot.reply.error.noCapability is False.')
-                raise SilentError
+                v = self._getConfig(conf.supybot.replies.noCapability)
+                v %= capability
+            s = self.__makeReply(v, s)
+            if s:
+                return self._error(s, **kwargs)
         else:
             log.warning('Denying %s for some unspecified capability '
                         '(or a default).', self.msg.prefix)
@@ -902,7 +928,8 @@ class NestedCommandsIrcProxy(ReplyIrcProxy):
                                   prefixNick=self.prefixNick)
                         self.irc.queueMsg(m)
                         return m
-                    msgs = ircutils.wrap(s, allowedLength)
+                    msgs = ircutils.wrap(s, allowedLength,
+                            break_long_words=True)
                     msgs.reverse()
                     instant = conf.get(conf.supybot.reply.mores.instant,target)
                     while instant > 1 and msgs:

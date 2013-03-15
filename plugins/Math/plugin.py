@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2002-2004, Jeremiah Fincher
-# Copyright (c) 2008-2009, James Vega
+# Copyright (c) 2008-2009, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -309,7 +309,22 @@ class Math(callbacks.Plugin):
         defaults to 1. For unit information, see 'units' command.
         """
         try:
+            digits = len(str(number).split('.')[1])
+        except IndexError:
+            digits = 0
+        try:
             newNum = convertcore.convert(number, unit1, unit2)
+            if isinstance(newNum, float):
+                zeros = 0
+                for char in str(newNum).split('.')[1]:
+                    if char != '0':
+                        break
+                    zeros += 1
+                # Let's add one signifiant digit. Physicists would not like
+                # that, but common people usually do not give extra zeros...
+                # (for example, with '32 C to F', an extra digit would be
+                # expected).
+                newNum = round(newNum, digits + 1 + zeros)
             newNum = self._floatToString(newNum)
             irc.reply(str(newNum))
         except convertcore.UnitDataError, ude:

@@ -64,9 +64,9 @@ class PluginDownloaderTestCase(PluginTestCase):
         self.assertRegexp('repolist ProgVal', '(.*, )?AttackProtector(, .*)?')
 
     def testInstallProgVal(self):
-        self.assertError('plugindownloader install ProgVal Listener')
+        self.assertError('plugindownloader install ProgVal Darcs')
         self.assertNotError('plugindownloader install ProgVal AttackProtector')
-        self.assertError('plugindownloader install ProgVal Listener')
+        self.assertError('plugindownloader install ProgVal Darcs')
         self._testPluginInstalled('AttackProtector')
 
     def testInstallQuantumlemur(self):
@@ -78,22 +78,6 @@ class PluginDownloaderTestCase(PluginTestCase):
     def testInstallStepnem(self):
         self.assertNotError('plugindownloader install stepnem Freenode')
         self._testPluginInstalled('Freenode')
-
-    def testInstallGsf(self):
-        self.assertNotError('plugindownloader install gsf-snapshot Debian')
-        self._testPluginInstalled('Debian')
-        self.assertError('plugindownloader install gsf-snapshot Anagram')
-        self.assertError('plugindownloader install gsf-snapshot Acronym')
-
-        self.assertNotError('plugindownloader install gsf-edsu Anagram')
-        self._testPluginInstalled('Anagram')
-        self.assertError('plugindownloader install gsf-edsu Debian')
-        self.assertError('plugindownloader install gsf-edsu Acronym')
-
-        self.assertNotError('plugindownloader install gsf Acronym')
-        self._testPluginInstalled('Acronym')
-        self.assertError('plugindownloader install gsf Anagram')
-        self.assertError('plugindownloader install gsf Debian')
 
     def testInstallNanotubeBitcoin(self):
         self.assertNotError('plugindownloader install nanotube-bitcoin GPG')

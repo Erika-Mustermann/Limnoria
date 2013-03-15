@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2002-2004, Jeremiah Fincher
-# Copyright (c) 2008-2010, James Vega
+# Copyright (c) 2008-2010, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -29,6 +29,7 @@
 ###
 
 import re
+import sys
 import cgi
 import time
 import socket
@@ -130,7 +131,9 @@ class Google(callbacks.PluginRegexp):
         for result in data:
             title = utils.web.htmlToText(result['titleNoFormatting']\
                                          .encode('utf-8'))
-            url = result['unescapedUrl'].encode('utf-8')
+            url = result['unescapedUrl']
+            if sys.version_info[0] < 3:
+                url = url.encode('utf-8')
             if title:
                 if bold:
                     title = ircutils.bold(title)
@@ -256,7 +259,7 @@ class Google(callbacks.PluginRegexp):
                                     '?client=t&hl=en&sl=%s&tl=%s&multires=1'
                                     '&otf=1&ssel=0&tsel=0&uptl=en&sc=1&text='
                                     '%s' % (sourceLang, targetLang, text),
-                                    headers).read()
+                                    headers).read().decode('utf8')
 
         while ',,' in result:
             result = result.replace(',,', ',null,')
@@ -268,7 +271,6 @@ class Google(callbacks.PluginRegexp):
             language = 'unknown'
 
         irc.reply(''.join(x[0] for x in data[0]), language)
-        
     translate = wrap(translate, ['something', 'to', 'something', 'text'])
 
     def googleSnarfer(self, irc, msg, match):
@@ -279,7 +281,7 @@ class Google(callbacks.PluginRegexp):
         data = self.search(searchString, msg.args[0], {'smallsearch': True})
         if data['responseData']['results']:
             url = data['responseData']['results'][0]['unescapedUrl']
-            irc.reply(url.encode('utf-8'), prefixNick=False)
+            irc.reply(url, prefixNick=False)
     googleSnarfer = urlSnarfer(googleSnarfer)
 
     def _googleUrl(self, s):

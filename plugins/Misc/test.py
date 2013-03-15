@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2002-2005, Jeremiah Fincher
-# Copyright (c) 2008, James Vega
+# Copyright (c) 2008, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -141,11 +141,14 @@ class MiscTestCase(ChannelPluginTestCase):
     def testTell(self):
         # This test fails because the test is seeing us as owner and Misc.tell
         # allows the owner to send messages to people the bot hasn't seen.
+        oldprefix, self.prefix = self.prefix, 'tester!foo@bar__no_testcap__baz'
+        self.nick = 'tester'
         m = self.getMsg('tell aljsdkfh [plugin tell]')
         self.failUnless('let you do' in m.args[1])
         m = self.getMsg('tell #foo [plugin tell]')
         self.failUnless('No need for' in m.args[1])
         m = self.getMsg('tell me you love me')
+        m = self.irc.takeMsg()
         self.failUnless(m.args[0] == self.nick)
 
     def testNoNestedTell(self):

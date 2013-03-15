@@ -2,7 +2,7 @@
 
 ###
 # Copyright (c) 2005, Jeremiah Fincher
-# Copyright (c) 2009, James Vega
+# Copyright (c) 2009, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -97,7 +97,7 @@ if __name__ == '__main__':
         parser.error('No conffile given.')
 
     os.chdir(options.botdir)
-    os.system('touch %s' % options.pidfile)
+    open(options.pidfile, 'a').close() 
 
     pid = None
     try:
@@ -117,7 +117,7 @@ if __name__ == '__main__':
         # First, we check if the pidfile is writable.  If not, supybot will just exit,
         # so we go ahead and refuse to start it.
         try:
-            file(options.pidfile, 'r+')
+            open(options.pidfile, 'r+')
         except EnvironmentError, e:
             debug('pidfile (%s) is not writable: %s' % (options.pidfile, e))
             sys.exit(-1)
@@ -132,7 +132,7 @@ if __name__ == '__main__':
                 inst.stdin.write('source %s' % filename + os.linesep)
         cmdline = '%s --daemon %s' % (options.supybot, options.conffile)
         debug('Sending cmdline to sh process.')
-        inst.stdin.write(cmdline + os.linesep)
+        inst.stdin.write(cmdline.encode('utf-8') + os.linesep.encode('utf-8'))
         inst.stdin.close()
         debug('Received from sh process: %r' % inst.stdout.read())
         ret = inst.wait()

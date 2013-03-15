@@ -1,3 +1,7 @@
+Master branch: [![Build Status (master branch)](https://travis-ci.org/ProgVal/Limnoria.png?branch=master)](https://travis-ci.org/ProgVal/Limnoria)
+
+Testing branch: [![Build Status (testing branch)](https://travis-ci.org/ProgVal/Limnoria.png?branch=testing)](https://travis-ci.org/ProgVal/Limnoria)
+
 # EVERYONE:
 
 Read [LICENSE].  It's a 3-clause BSD license, but you should read it
@@ -31,8 +35,11 @@ supybot-adduser) are all installed to your Python directory's
 this: 
 
 ```
-C:\Python2x\python C:\Python2x\Scripts\supybot-wizard
+C:\Python27\python C:\Python27\Scripts\supybot-wizard
 ```
+
+If you are running a Python version that is not 2.7, replace "27" in the
+file names with your Python version, without the dot (for example "26".)
 
 # DEVELOPERS:
 

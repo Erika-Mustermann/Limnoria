@@ -2,7 +2,7 @@
 
 ###
 # Copyright (c) 2002-2005, Jeremiah Fincher
-# Copyright (c) 2009, James Vega
+# Copyright (c) 2009, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -30,27 +30,18 @@
 # POSSIBILITY OF SUCH DAMAGE.
 ###
 
-import sys
-
-if sys.version_info < (2, 6, 0):
-    sys.stderr.write("Supybot requires Python 2.6 or newer.\n")
-    sys.exit(-1)
-
-import textwrap
-
-clean = False
-while '--clean' in sys.argv:
-    clean = True
-    sys.argv.remove('--clean')
-
-import glob
-import shutil
 import os
+import sys
+import tempfile
 import subprocess
 
+debug = '--debug' in sys.argv
 
-plugins = [s for s in os.listdir('plugins') if
-           os.path.exists(os.path.join('plugins', s, 'plugin.py'))]
+path = os.path.dirname(__file__)
+if debug:
+    print('DEBUG: Changing dir from %r to %r' % (os.getcwd(), path))
+if path:
+    os.chdir(path)
 
 version = None
 try:
@@ -60,7 +51,6 @@ try:
             .strip() \
             .replace(' +', '+') \
             .replace(' ', 'T')
-
 except:
     pass
 if not version:
@@ -74,13 +64,64 @@ fd = open(os.path.join('src', 'version.py'), 'a')
 fd.write("version = '0.83.4.1+limnoria %s'\n" % version)
 fd.close()
 
+if sys.version_info < (2, 6, 0):
+    sys.stderr.write("Supybot requires Python 2.6 or newer.")
+    sys.stderr.write(os.linesep)
+    sys.exit(-1)
+elif sys.version_info[0] >= 3:
+    if os.path.split(os.path.abspath(os.path.dirname(__file__)))[-1] == 'py3k':
+        if debug:
+            print('DEBUG: Running setup.py with Python 3: second stage.')
+        while '--debug' in sys.argv:
+            sys.argv.remove('--debug')
+    else:
+        if debug:
+            print('DEBUG: Running setup.py with Python 3: first stage.')
+        print('Converting code from Python 2 to Python 3. This make take a '
+                'few minutes.')
+        # For some reason, using open(os.devnull) makes the subprocess exit before
+        # it finishes...
+        if debug:
+            subprocess.Popen([sys.executable,
+                os.path.join('2to3', 'run.py')]).wait()
+        else:
+            subprocess.Popen([sys.executable, os.path.join('2to3', 'run.py')],
+                    stdout=tempfile.TemporaryFile(),
+                    stderr=tempfile.TemporaryFile()).wait()
+        if debug:
+            print('DEBUG: Changing dir to py3k/')
+        os.chdir('py3k')
+        if debug:
+            print('DEBUG: Running %r' % ([sys.executable] + sys.argv))
+        subprocess.Popen([sys.executable] + sys.argv).wait()
+        exit()
+else:
+    while '--debug' in sys.argv:
+        sys.argv.remove('--debug')
+
+
+import textwrap
+
+clean = False
+while '--clean' in sys.argv:
+    clean = True
+    sys.argv.remove('--clean')
+
+import glob
+import shutil
+import os
+
+
+plugins = [s for s in os.listdir('plugins') if
+           os.path.exists(os.path.join('plugins', s, 'plugin.py'))]
+
 def normalizeWhitespace(s):
     return ' '.join(s.split())
 
 try:
     from distutils.core import setup
     from distutils.sysconfig import get_python_lib
-except ImportError, e:
+except ImportError as e:
     s = normalizeWhitespace("""Supybot requires the distutils package to
     install. This package is normally included with Python, but for some
     unfathomable reason, many distributions to take it out of standard Python
@@ -101,14 +142,14 @@ if clean:
     previousInstall = os.path.join(get_python_lib(), 'supybot')
     if os.path.exists(previousInstall):
         try:
-            print 'Removing current installation.'
+            print('Removing current installation.')
             shutil.rmtree(previousInstall)
-        except Exception, e:
-            print 'Couldn\'t remove former installation: %s' % e
+        except Exception as e:
+            print('Couldn\'t remove former installation: %s' % e)
             sys.exit(-1)
 
 packages = ['supybot',
-            'supybot.locale',
+            'supybot.locales',
             'supybot.utils',
             'supybot.drivers',
             'supybot.plugins',] + \
@@ -127,7 +168,7 @@ package_dir = {'supybot': 'src',
                'supybot.utils': 'src/utils',
                'supybot.plugins': 'plugins',
                'supybot.drivers': 'src/drivers',
-               'supybot.locale': 'locale',
+               'supybot.locales': 'locales',
                'supybot.plugins.Google.local': 'plugins/Google/local',
                'supybot.plugins.Google.local.simplejson':
                'plugins/Google/local/simplejson',
@@ -139,24 +180,25 @@ package_dir = {'supybot': 'src',
                'plugins/Time/local/dateutil',
               }
 
-package_data = {'supybot.locale': [s for s in os.listdir('locale/')]}
+package_data = {'supybot.locales': [s for s in os.listdir('locales/')]}
 
 for plugin in plugins:
     package_dir['supybot.plugins.' + plugin] = 'plugins/' + plugin
-    locale_path = 'plugins/' + plugin + '/locale/'
-    locale_name = 'supybot.plugins.'+plugin
-    if os.path.exists(locale_path):
-        package_data.update({locale_name: ['locale/'+s for s in os.listdir(locale_path)]})
+    locales_path = 'plugins/' + plugin + '/locales/'
+    locales_name = 'supybot.plugins.'+plugin
+    if os.path.exists(locales_path):
+        package_data.update({locales_name: ['locales/'+s for s in os.listdir(locales_path)]})
 
 setup(
     # Metadata
-    name='supybot',
+    name='limnoria',
+    provides=['supybot'],
     version=version,
-    author='Jeremy Fincher',
-    url='http://sourceforge.net/projects/supybot/',
-    author_email='jemfinch@supybot.com',
-    download_url='http://www.sf.net/project/showfiles.php?group_id=58965',
-    description='A flexible and extensible Python IRC bot and framework.',
+    author='Valentin Lorentz',
+    url='https://github.com/ProgVal/Limnoria',
+    author_email='progval+limnoria@progval.net',
+    download_url='http://builds.progval.net/limnoria/',
+    description='A modified version of Supybot (an IRC bot)',
     long_description=normalizeWhitespace("""A robust, full-featured Python IRC
     bot with a clean and flexible plugin API.  Equipped with a complete ACL
     system for specifying user permissions with as much as per-command

@@ -2,7 +2,7 @@
 
 ###
 # Copyright (c) 2003-2004, Jeremiah Fincher
-# Copyright (c) 2009, James Vega
+# Copyright (c) 2009, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -39,8 +39,8 @@ def error(s):
         sys.stderr.write(os.linesep)
     sys.exit(-1)
 
-if sys.version_info < (2, 4, 0):
-    error('This program requires Python >= 2.4.0')
+if sys.version_info < (2, 6, 0):
+    error('This program requires Python >= 2.6.0')
 
 import supybot
 
@@ -163,6 +163,12 @@ def main():
                            'run as root.  You don\'t want this.  Don\'t do it.'
                            '  Even if you think you want it, you don\'t.  '
                            'You\'re probably dumb if you do this.')
+    parser.add_option('', '--allow-home', action='store_true',
+                      dest='allowHome',
+                      help='Determines whether the wizard will be allowed to '
+                           'run directly in the HOME directory. '
+                           'You should not do this unless you want it to '
+                           'create multiple files in your HOME directory.')
     parser.add_option('', '--no-network', action='store_false',
                       dest='network',
                       help='Determines whether the wizard will be allowed to '
@@ -171,6 +177,9 @@ def main():
     if os.name == 'posix':
         if (os.getuid() == 0 or os.geteuid() == 0) and not options.allowRoot:
             error('Please, don\'t run this as root.')
+    if os.name == 'posix':
+        if (os.getcwd() == os.path.expanduser('~')) and not options.allowHome:
+            error('Please, don\'t run this in your HOME directory.')
 
     filename = ''
     if args:
@@ -366,8 +375,8 @@ def main():
 
     output("""Found %s (%s).""" % (serverString, ip))
     output("""IRC Servers almost always accept connections on port
-    6667.  They can, however, accept connections anywhere their admin
-    feels like he wants to accept connections from.""")
+    6667.  They can, however, accept connections anywhere their admins
+    feel like they wants to accept connections from.""")
     if yn('Does this server require connection on a non-standard port?',
           default=False):
         port = 0

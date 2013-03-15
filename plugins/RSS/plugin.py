@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2002-2004, Jeremiah Fincher
-# Copyright (c) 2008-2010, James Vega
+# Copyright (c) 2008-2010, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -48,7 +48,7 @@ try:
             'local.feedparser.feedparser', 'feedparser', 'local.feedparser')
 except ImportError:
     raise callbacks.Error, \
-            'You the feedparser module installed to use this plugin.  ' \
+            'You need the feedparser module installed to use this plugin.  ' \
             'Download the module at <http://feedparser.org/>.'
 
 def getFeedName(irc, msg, args, state):

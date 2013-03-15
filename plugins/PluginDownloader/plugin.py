@@ -121,10 +121,12 @@ class GithubRepository(GitRepository):
         dirname = ''.join((self._path, plugin))
         directories = conf.supybot.directories.plugins()
         directory = self._getWritableDirectoryFromList(directories)
-        assert directory is not None
+        assert directory is not None, \
+                'No valid directory in supybot.directories.plugins.'
 
         try:
-            assert archive.getmember(prefix + dirname).isdir()
+            assert archive.getmember(prefix + dirname).isdir(), \
+                'This is not a valid plugin (it is a file, not a directory).'
 
             for file in archive.getmembers():
                 if file.name.startswith(prefix + dirname):
@@ -133,7 +135,8 @@ class GithubRepository(GitRepository):
                     newFileName = newFileName[len(self._path)-1:]
                     newFileName = os.path.join(directory, newFileName)
                     if os.path.exists(newFileName):
-                        assert os.path.isdir(newFileName)
+                        assert os.path.isdir(newFileName), newFileName + \
+                                'should not be a file.'
                         shutil.rmtree(newFileName)
                     if extractedFile is None:
                         os.mkdir(newFileName)
@@ -172,18 +175,18 @@ repositories = {
                                                    'stepnem',
                                                    'supybot-plugins',
                                                    ),
-               'gsf-snapshot':     GithubRepository(
-                                                   'gsf',
+               'code4lib-snapshot':GithubRepository(
+                                                   'code4lib',
                                                    'supybot-plugins',
                                                    'Supybot-plugins-20060723',
                                                    ),
-               'gsf-edsu':         GithubRepository(
-                                                   'gsf',
+               'code4lib-edsu':    GithubRepository(
+                                                   'code4lib',
                                                    'supybot-plugins',
                                                    'edsu-plugins',
                                                    ),
-               'gsf':              GithubRepository(
-                                                   'gsf',
+               'code4lib':         GithubRepository(
+                                                   'code4lib',
                                                    'supybot-plugins',
                                                    'plugins',
                                                    ),
@@ -239,6 +242,15 @@ repositories = {
                                                    'resistivecorpse',
                                                    'supybot-plugins'
                                                    ),
+               'frumious':         GithubRepository(
+                                                   'frumiousbandersnatch',
+                                                   'sobrieti-plugins',
+                                                   'plugins',
+                                                   ),
+               'jonimoose':        GithubRepository(
+                                                   'Jonimoose',
+                                                   'Supybot-plugins',
+                                                   ),
                }
 
 class PluginDownloader(callbacks.Plugin):
@@ -292,10 +304,11 @@ class PluginDownloader(callbacks.Plugin):
                 repositories[repository].install(plugin)
                 irc.replySuccess()
             except Exception as e:
-                raise e
-                #FIXME: more detailed error message
+                import traceback
+                traceback.print_exc(e)
                 log.error(str(e))
-                irc.error('The plugin could not be installed.')
+                irc.error('The plugin could not be installed. Check the logs '
+                        'for a more detailed error.')
 
     install = wrap(install, ['owner', 'something', 'something'])
 

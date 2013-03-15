@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2002-2005, Jeremiah Fincher
-# Copyright (c) 2009, James Vega
+# Copyright (c) 2009, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -299,10 +299,8 @@ class Misc(callbacks.Plugin):
                 data = json.loads(utils.web.getUrl(newestUrl % branch)
                         .decode('utf8'))
                 version = data['commit']['committer']['date']
-                # Strip the last ':':
-                version = ''.join(version.rsplit(':', 1))
-                # Replace the last '-' by '+':
-                version = '+'.join(version.rsplit('-', 1))
+                # Strip the last 'Z':
+                version = ''.join(version.rsplit('Z', 1))
                 versions[branch] = version.encode('utf-8')
             newest = _('The newest versions available online are %s.') % \
                     ', '.join([_('%s (in %s)') % (y,x)
@@ -511,7 +509,7 @@ class Misc(callbacks.Plugin):
         if target.lower() == 'me':
             target = msg.nick
         if ircutils.isChannel(target):
-            irc.error(_('Dude, just give the command.  No need for the tell.'))
+            irc.error(_('Hey, just give the command.  No need for the tell.'))
             return
         if not ircutils.isNick(target):
             irc.errorInvalid('nick', target)

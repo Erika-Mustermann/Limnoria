@@ -28,6 +28,8 @@
 # POSSIBILITY OF SUCH DAMAGE.
 ###
 
+import time
+
 from supybot.test import *
 #import supybot.plugin as plugin
 import supybot.ircutils as ircutils
@@ -218,6 +220,7 @@ class FactoidsTestCase(ChannelPluginTestCase):
         self.assertRegexp('most popular',
                             "Top 1 requested factoid:.*moogle.*(1)")
         # Check plural response
+        time.sleep(1)
         self.prefix = userPrefix2
         self.assertNotError('mogle is <reply>mo')
         self.assertRegexp('most authored',
@@ -264,10 +267,10 @@ class FactoidsTestCase(ChannelPluginTestCase):
                                 'Key search for "foo" '
                                 '(2 found): "foo" and "foo\'"')
             # Check unicode stuff
-            self.assertResponse('listkeys Б', 'No keys matching "Б" found.')
-            self.assertNotError('АБВГДЕЖ is foo')
-            self.assertNotError('АБВГДЕЖЗИ is foo')
-            self.assertResponse('listkeys Б',
+            self.assertResponse(u'listkeys Б', 'No keys matching "Б" found.')
+            self.assertNotError(u'АБВГДЕЖ is foo')
+            self.assertNotError(u'АБВГДЕЖЗИ is foo')
+            self.assertResponse(u'listkeys Б',
                                 'Key search for "Б" '
                                 '(2 found): "АБВГДЕЖ" and "АБВГДЕЖЗИ"')
         finally:
@@ -326,7 +329,7 @@ class FactoidsTestCase(ChannelPluginTestCase):
         self.assertNoResponse(' ', 3)
 
     def testConfigShowFactoidIfOnlyOneMatch(self):
-        # man these are long
+        # these are long
         MFconf = conf.supybot.plugins.MoobotFactoids
         self.assertNotError('foo is bar')
         # Default to saying the factoid value

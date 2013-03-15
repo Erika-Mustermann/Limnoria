@@ -130,6 +130,24 @@ class ValuesTestCase(SupyTestCase):
         v.set('"xyzzy')
         self.assertEqual(v(), '"xyzzy')
 
+    def testJson(self):
+        data = {'foo': ['bar', 'baz', 5], 'qux': None}
+        v = registry.Json('foo', 'help')
+        self.assertEqual(v(), 'foo')
+        v.setValue(data)
+        self.assertEqual(v(), data)
+        self.assertIsNot(v(), data)
+
+        with v.editable() as dict_:
+            dict_['supy'] = 'bot'
+            del dict_['qux']
+            self.assertNotIn('supy', v())
+            self.assertIn('qux', v())
+        self.assertIn('supy', v())
+        self.assertEqual(v()['supy'], 'bot')
+        self.assertIsNot(v()['supy'], 'bot')
+        self.assertNotIn('qux', v())
+
     def testNormalizedString(self):
         v = registry.NormalizedString("""foo
         bar           baz
@@ -173,5 +191,12 @@ class ValuesTestCase(SupyTestCase):
         registry.close(conf.supybot, filename)
         registry.open_registry(filename)
         self.assertEqual(conf.supybot.reply.whenAddressedBy.chars(), '\\')
+
+    def testWith(self):
+        v = registry.String('foo', 'help')
+        self.assertEqual(v(), 'foo')
+        with v.context('bar'):
+            self.assertEqual(v(), 'bar')
+        self.assertEqual(v(), 'foo')
 
 # vim:set shiftwidth=4 softtabstop=4 expandtab textwidth=79:

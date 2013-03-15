@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2002-2005, Jeremiah Fincher
-# Copyright (c) 2010, James Vega
+# Copyright (c) 2010, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -36,6 +36,7 @@ object (which, as you'll read later, is quite...full-featured :))
 """
 
 import re
+import sys
 import time
 
 import supybot.conf as conf
@@ -73,7 +74,7 @@ class IrcMsg(object):
     keyword argument representing a message from which to take all the
     attributes not provided otherwise as keyword arguments.  So, for instance,
     if a programmer wanted to take a PRIVMSG he'd gotten and simply redirect it
-    to a different source, he could do this:
+    to a different source, they could do this:
 
     IrcMsg(prefix='', args=(newSource, otherMsg.args[1]), msg=otherMsg)
     """
@@ -196,9 +197,11 @@ class IrcMsg(object):
         return (self.__class__, (str(self),))
 
     def tag(self, tag, value=True):
+        """Affect a key:value pair to this message."""
         self.tags[tag] = value
 
     def tagged(self, tag):
+        """Get the value affected to a tag."""
         return self.tags.get(tag) # Returns None if it's not there.
 
     def __getattr__(self, attr):
@@ -532,6 +535,8 @@ def kick(channel, nick, s='', prefix='', msg=None):
         assert isNick(nick), repr(nick)
     if msg and not prefix:
         prefix = msg.prefix
+    if sys.version_info[0] < 3 and isinstance(s, unicode):
+        s = s.encode('utf8')
     assert isinstance(s, str)
     if s:
         return IrcMsg(prefix=prefix, command='KICK',
@@ -548,6 +553,8 @@ def kicks(channel, nicks, s='', prefix='', msg=None):
         assert all(isNick, nicks), nicks
     if msg and not prefix:
         prefix = msg.prefix
+    if sys.version_info[0] < 3 and isinstance(s, unicode):
+        s = s.encode('utf8')
     assert isinstance(s, str)
     if s:
         return IrcMsg(prefix=prefix, command='KICK',
@@ -561,6 +568,8 @@ def privmsg(recipient, s, prefix='', msg=None):
     if conf.supybot.protocols.irc.strictRfc():
         assert (isChannel(recipient) or isNick(recipient)), repr(recipient)
         assert s, 's must not be empty.'
+    if sys.version_info[0] < 3 and isinstance(s, unicode):
+        s = s.encode('utf8')
     assert isinstance(s, str)
     if msg and not prefix:
         prefix = msg.prefix
@@ -591,6 +600,8 @@ def notice(recipient, s, prefix='', msg=None):
     if conf.supybot.protocols.irc.strictRfc():
         assert (isChannel(recipient) or isNick(recipient)), repr(recipient)
         assert s, 'msg must not be empty.'
+    if sys.version_info[0] < 3 and isinstance(s, unicode):
+        s = s.encode('utf8')
     assert isinstance(s, str)
     if msg and not prefix:
         prefix = msg.prefix
@@ -639,6 +650,8 @@ def part(channel, s='', prefix='', msg=None):
         assert isChannel(channel), repr(channel)
     if msg and not prefix:
         prefix = msg.prefix
+    if sys.version_info[0] < 3 and isinstance(s, unicode):
+        s = s.encode('utf8')
     assert isinstance(s, str)
     if s:
         return IrcMsg(prefix=prefix, command='PART',
@@ -653,6 +666,8 @@ def parts(channels, s='', prefix='', msg=None):
         assert all(isChannel, channels), channels
     if msg and not prefix:
         prefix = msg.prefix
+    if sys.version_info[0] < 3 and isinstance(s, unicode):
+        s = s.encode('utf8')
     assert isinstance(s, str)
     if s:
         return IrcMsg(prefix=prefix, command='PART',
@@ -680,6 +695,8 @@ def topic(channel, topic=None, prefix='', msg=None):
         return IrcMsg(prefix=prefix, command='TOPIC',
                       args=(channel,), msg=msg)
     else:
+        if sys.version_info[0] < 3 and isinstance(topic, unicode):
+            topic = topic.encode('utf8')
         assert isinstance(topic, str)
         return IrcMsg(prefix=prefix, command='TOPIC',
                       args=(channel, topic), msg=msg)

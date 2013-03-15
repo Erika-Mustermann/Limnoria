@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2005, Jeremiah Fincher
-# Copyright (c) 2009, James Vega
+# Copyright (c) 2009, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -92,8 +92,9 @@ class Web(callbacks.PluginRegexp):
                 return
             try:
                 size = conf.supybot.protocols.http.peekSize()
-                text = utils.web.getUrl(url, size=size) \
-                        .decode('utf8')
+                text = utils.web.getUrl(url, size=size)
+                if sys.version_info[0] >= 3:
+                    text = text.decode('utf8', 'replace')
             except utils.web.Error, e:
                 self.log.info('Couldn\'t snarf title of %u: %s.', url, e)
                 return
@@ -107,7 +108,10 @@ class Web(callbacks.PluginRegexp):
                 domain = utils.web.getDomain(url)
                 title = utils.web.htmlToText(parser.title.strip())
                 if sys.version_info[0] < 3:
-                    title = title.encode('utf8', 'replace')
+                    try:
+                        title = title.encode('utf8', 'replace')
+                    except UnicodeDecodeError:
+                        pass
                 s = format(_('Title: %s (at %s)'), title, domain)
                 irc.reply(s, prefixNick=False)
     titleSnarfer = urlSnarfer(titleSnarfer)
@@ -182,8 +186,11 @@ class Web(callbacks.PluginRegexp):
         DCC, ...).
         """
         size = conf.supybot.protocols.http.peekSize()
-        text = utils.web.getUrl(url, size=size) \
-                        .decode('utf8')
+        text = utils.web.getUrl(url, size=size)
+        try:
+            text = text.decode('utf8', 'replace')
+        except:
+            pass
         parser = Title()
         try:
             parser.feed(text)
@@ -202,30 +209,6 @@ class Web(callbacks.PluginRegexp):
             irc.reply(format(_('That URL appears to have no HTML title '
                              'within the first %S.'), size))
     title = wrap(title, [getopts({'no-filter': ''}), 'httpUrl'])
-
-    _netcraftre = re.compile(r'td align="left">\s+<a[^>]+>(.*?)<a href',
-                             re.S | re.I)
-    @internationalizeDocstring
-    def netcraft(self, irc, msg, args, hostname):
-        """<hostname|ip>
-
-        Returns Netcraft.com's determination of what operating system and
-        webserver is running on the host given.
-        """
-        url = 'http://uptime.netcraft.com/up/graph/?host=' + hostname
-        html = utils.web.getUrl(url) \
-                        .decode('utf8')
-        m = self._netcraftre.search(html)
-        if m:
-            html = m.group(1)
-            s = utils.web.htmlToText(html, tagReplace='').strip()
-            s = s.rstrip('-').strip()
-            irc.reply(s) # Snip off "the site"
-        elif 'We could not get any results' in html:
-            irc.reply(_('No results found for %s.') % hostname)
-        else:
-            irc.error(_('The format of page the was odd.'))
-    netcraft = wrap(netcraft, ['text'])
 
     @internationalizeDocstring
     def urlquote(self, irc, msg, args, text):

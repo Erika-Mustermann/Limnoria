@@ -273,7 +273,7 @@ class ChannelState(utils.python.Object):
         """Changes the user oldNick to newNick; used for NICK changes."""
         # Note that this doesn't have to have the sigil (@%+) that users
         # have to have for addUser; it just changes the name of the user
-        # without changing any of his categories.
+        # without changing any of their categories.
         for s in (self.users, self.ops, self.halfops, self.voices):
             if oldNick in s:
                 s.remove(oldNick)
@@ -406,7 +406,7 @@ class IrcState(IrcCommandDispatcher):
         """Handles parsing the 004 reply
 
         Supported user and channel modes are cached"""
-        # msg.args = [nickname, server, ircd-version, umodes, modes,
+        # msg.args = [nick, server, ircd-version, umodes, modes,
         #             modes that require arguments? (non-standard)]
         self.supported['umodes'] = msg.args[3]
         self.supported['chanmodes'] = msg.args[4]
@@ -506,6 +506,12 @@ class IrcState(IrcCommandDispatcher):
                 self.channels[channel] = chan
                 # I don't know why this assert was here.
                 #assert msg.nick == irc.nick, msg
+
+    def do367(self, irc, msg):
+        # Example:
+        # :server 367 user #chan some!random@user evil!channel@op 1356276459
+        state = self.channels[msg.args[1]]
+        state.bans.add(msg.args[2])
 
     def doMode(self, irc, msg):
         channel = msg.args[0]
@@ -643,7 +649,11 @@ class Irc(IrcCommandDispatcher):
 
     # This *isn't* threadsafe!
     def addCallback(self, callback):
-        """Adds a callback to the callbacks list."""
+        """Adds a callback to the callbacks list.
+
+        :param callback: A callback object
+        :type callback: supybot.irclib.IrcCallback
+        """
         assert not self.getCallback(callback.name())
         self.callbacks.append(callback)
         # This is the new list we're building, which will be tsorted.
@@ -877,8 +887,16 @@ class Irc(IrcCommandDispatcher):
         self.ident = conf.supybot.ident()
         self.alternateNicks = conf.supybot.nick.alternates()[:]
         self.password = conf.supybot.networks.get(self.network).password()
-        self.sasl_username = conf.supybot.networks.get(self.network).sasl.username()
-        self.sasl_password = conf.supybot.networks.get(self.network).sasl.password()
+        self.sasl_username = \
+                conf.supybot.networks.get(self.network).sasl.username()
+        # TODO Find a better way to fix this
+        if hasattr(self.sasl_username, 'decode'):
+            self.sasl_username = self.sasl_username.decode('utf-8')
+        self.sasl_password = \
+                conf.supybot.networks.get(self.network).sasl.password()
+        # TODO Find a better way to fix this
+        if hasattr(self.sasl_password, 'decode'):
+            self.sasl_password = self.sasl_password.decode('utf-8')
         self.prefix = '%s!%s@%s' % (self.nick, self.ident, 'unset.domain')
         # The rest.
         self.lastTake = 0
@@ -886,6 +904,7 @@ class Irc(IrcCommandDispatcher):
         self.afterConnect = False
         self.lastping = time.time()
         self.outstandingPing = False
+
 
     def _queueConnectMessages(self):
         if self.zombie:
@@ -896,8 +915,11 @@ class Irc(IrcCommandDispatcher):
                 if not self.sasl_username:
                     log.error('SASL username is not set, unable to identify.')
                 else:
-                    auth_string = base64.b64encode('%s\x00%s\x00%s' % (self.sasl_username,
-                        self.sasl_username, self.sasl_password))
+                    auth_string = base64.b64encode('\x00'.join([
+                        self.sasl_username,
+                        self.sasl_username,
+                        self.sasl_password
+                    ]).encode('utf-8')).decode('utf-8')
                     log.debug('Sending CAP REQ command, requesting capability \'sasl\'.')
                     self.queueMsg(ircmsgs.IrcMsg(command="CAP", args=('REQ', 'sasl')))
                     log.debug('Sending AUTHENTICATE command, using mechanism PLAIN.')
@@ -997,6 +1019,8 @@ class Irc(IrcCommandDispatcher):
             channel = msg.args[0]
             self.queueMsg(ircmsgs.who(channel)) # Ends with 315.
             self.queueMsg(ircmsgs.mode(channel)) # Ends with 329.
+            for channel in msg.args[0].split(','):
+                self.queueMsg(ircmsgs.mode(channel, '+b'))
             self.startedSync[channel] = time.time()
 
     def do315(self, msg):

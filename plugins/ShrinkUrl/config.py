@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2005, Jeremiah Fincher
-# Copyright (c) 2009-2010, James Vega
+# Copyright (c) 2009-2010, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -54,7 +54,7 @@ class ShrinkCycle(registry.SpaceSeparatedListOfStrings):
         self.lastIndex = -1
 
     def setValue(self, v):
-        super(ShrinkCycle, self).setValue(v)
+        super(self.__class__, self).setValue(v)
         self.lastIndex = -1
 
     def getService(self):

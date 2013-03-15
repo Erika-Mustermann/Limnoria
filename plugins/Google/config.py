@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2005, Jeremiah Fincher
-# Copyright (c) 2008-2010, James Vega
+# Copyright (c) 2008-2010, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -90,7 +90,7 @@ class NumSearchResults(registry.PositiveInteger):
     def setValue(self, v):
         if v > 8:
             self.error()
-        super(NumSearchResults, self).setValue(v)
+        super(self.__class__, self).setValue(v)
 
 class SafeSearch(registry.OnlySomeStrings):
     validStrings = ['active', 'moderate', 'off']

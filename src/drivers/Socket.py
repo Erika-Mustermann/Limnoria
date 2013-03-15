@@ -1,6 +1,6 @@
-###
+##
 # Copyright (c) 2002-2004, Jeremiah Fincher
-# Copyright (c) 2010, James Vega
+# Copyright (c) 2010, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -38,6 +38,21 @@ import sys
 import time
 import select
 import socket
+import supybot.log as log
+import supybot.conf as conf
+import supybot.utils as utils
+import supybot.world as world
+import supybot.drivers as drivers
+import supybot.schedule as schedule
+from itertools import imap
+try:
+    from chardet.universaldetector import UniversalDetector
+    chardetLoaded = True
+except:
+    drivers.log.debug('chardet module not available, '
+                      'cannot guess character encoding if'
+                      'using Python3')
+    chardetLoaded = False
 try:
     import ssl
     SSLError = ssl.SSLError
@@ -47,16 +62,12 @@ except:
     class SSLError(Exception):
         pass
 
-import supybot.log as log
-import supybot.conf as conf
-import supybot.utils as utils
-import supybot.world as world
-import supybot.drivers as drivers
-import supybot.schedule as schedule
-from itertools import imap
 
 class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
+    _instances = []
+    _selecting = [False] # We want it to be mutable.
     def __init__(self, irc):
+        self._instances.append(self)
         self.irc = irc
         drivers.IrcDriver.__init__(self, irc)
         drivers.ServersMixin.__init__(self, irc)
@@ -99,6 +110,8 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
         # hasn't finished yet.  We'll keep track of how many we get.
         if e.args[0] != 11 or self.eagains > 120:
             drivers.log.disconnect(self.currentServer, e)
+            if self in self._instances:
+                self._instances.remove(self)
             try:
                 self.conn.close()
             except:
@@ -129,6 +142,33 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
         if self.zombie and not self.outbuffer:
             self._reallyDie()
 
+    @classmethod
+    def _select(cls):
+        if cls._selecting[0]:
+            return
+        try:
+            cls._selecting[0] = True
+            for inst in cls._instances:
+                # Do not use a list comprehension here, we have to edit the list
+                # and not to reassign it.
+                if (sys.version_info[0] == 3 and inst.conn._closed) or \
+                        (sys.version_info[0] == 2 and
+                            inst.conn._sock.__class__ is socket._closedsocket):
+                    cls._instances.remove(inst)
+            if not cls._instances:
+                return
+            rlist, wlist, xlist = select.select([x.conn for x in cls._instances],
+                    [], [], conf.supybot.drivers.poll())
+            for instance in cls._instances:
+                if instance.conn in rlist:
+                    instance._read()
+        finally:
+            cls._selecting[0] = False
+        for instance in cls._instances:
+            if instance.irc and not instance.irc.zombie:
+                instance._sendIfMsgs()
+
+
     def run(self):
         now = time.time()
         if self.nextReconnectTime is not None and now > self.nextReconnectTime:
@@ -141,6 +181,10 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
             time.sleep(conf.supybot.drivers.poll())
             return
         self._sendIfMsgs()
+        self._select()
+
+    def _read(self):
+        """Called by _select() when we can read data."""
         try:
             self.inbuffer += self.conn.recv(1024)
             self.eagains = 0 # If we successfully recv'ed, we can reset this.
@@ -148,7 +192,32 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
             self.inbuffer = lines.pop()
             for line in lines:
                 if sys.version_info[0] >= 3:
-                    line = line.decode(errors='replace')
+                    #first, try to decode using utf-8
+                    try:
+                        line = line.decode('utf8', 'strict')
+                    except UnicodeError:
+                        # if this fails and chardet is loaded, try to guess the correct encoding
+                        if chardetLoaded:
+                            u = UniversalDetector()
+                            u.feed(line)
+                            u.close()
+                            if u.result['encoding']:
+                                # try to use the guessed encoding
+                                try:
+                                    line = line.decode(u.result['encoding'],
+                                        'strict')
+                                # on error, give up and replace the offending characters
+                                except UnicodeError:
+                                    line = line.decode(errors='replace')
+                            else:
+                                # if no encoding could be guessed, fall back to utf-8 and
+                                # replace offending characters
+                                line = line.decode('utf8', 'replace')
+                        # if chardet is not loaded, try to decode using utf-8 and replace any
+                        # offending characters
+                        else:
+                            line = line.decode('utf8', 'replace')
+           
                 msg = drivers.parseMsg(line)
                 if msg is not None:
                     self.irc.feedMsg(msg)
@@ -173,6 +242,12 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
         self.nextReconnectTime = None
         if self.connected:
             drivers.log.reconnect(self.irc.network)
+            if self in self._instances:
+                self._instances.remove(self)
+            try:
+                self.conn.shutdown(socket.SHUT_RDWR)
+            except: # "Transport endpoint not connected"
+                pass
             self.conn.close()
             self.connected = False
         if reset:
@@ -225,6 +300,7 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
                 drivers.log.connectError(self.currentServer, e)
                 self.scheduleReconnect()
             return
+        self._instances.append(self)
 
     def _checkAndWriteOrReconnect(self):
         self.writeCheckTime = None
@@ -250,6 +326,8 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
         self.nextReconnectTime = when
 
     def die(self):
+        if self in self._instances:
+            self._instances.remove(self)
         self.zombie = True
         if self.nextReconnectTime is not None:
             self.nextReconnectTime = None
@@ -259,6 +337,7 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
 
     def _reallyDie(self):
         if self.conn is not None:
+            self.conn.shutdown(socket.SHUT_RDWR)
             self.conn.close()
         drivers.IrcDriver.die(self)
         # self.irc.die() Kill off the ircs yourself, jerk!

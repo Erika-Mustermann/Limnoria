@@ -339,11 +339,19 @@ class Channel(callbacks.Plugin):
             bannedNick = target
             try:
                 bannedHostmask = irc.state.nickToHostmask(target)
+                banmaskstyle = conf.supybot.protocols.irc.banmask
+                banmask = banmaskstyle.makeBanmask(bannedHostmask, [o[0] for o in optlist])
             except KeyError:
-                irc.error(format(_('I haven\'t seen %s.'), bannedNick), Raise=True)
+                if not conf.supybot.protocols.irc.strictRfc() and \
+                        target.startswith('$'):
+                    # Select the last part, or the whole target:
+                    bannedNick = target.split(':')[-1]
+                    banmask = bannedHostmask = target
+                else:
+                    irc.error(format(_('I haven\'t seen %s.'), bannedNick), Raise=True)
         else:
             bannedNick = ircutils.nickFromHostmask(target)
-            bannedHostmask = target
+            banmask = bannedHostmask = target
         if not irc.isNick(bannedNick):
             self.log.warning('%q tried to kban a non nick: %q',
                              msg.prefix, bannedNick)
@@ -355,8 +363,6 @@ class Channel(callbacks.Plugin):
         if not reason:
             reason = msg.nick
         capability = ircdb.makeChannelCapability(channel, 'op')
-        banmaskstyle = conf.supybot.protocols.irc.banmask
-        banmask = banmaskstyle.makeBanmask(bannedHostmask, [o[0] for o in optlist])
         # Check (again) that they're not trying to make us kickban ourself.
         if ircutils.hostmaskPatternEqual(banmask, irc.prefix):
             if ircutils.hostmaskPatternEqual(bannedHostmask, irc.prefix):
@@ -401,7 +407,7 @@ class Channel(callbacks.Plugin):
 
     @internationalizeDocstring
     def unban(self, irc, msg, args, channel, hostmask):
-        """[<channel>] [<hostmask>]
+        """[<channel>] [<hostmask|--all>]
 
         Unbans <hostmask> on <channel>.  If <hostmask> is not given, unbans
         any hostmask currently banned on <channel> that matches your current
@@ -409,7 +415,10 @@ class Channel(callbacks.Plugin):
         unexpectedly (or accidentally) banned from the channel.  <channel> is
         only necessary if the message isn't sent in the channel itself.
         """
-        if hostmask:
+        if hostmask == '--all':
+            bans = irc.state.channels[channel].bans
+            self._sendMsg(irc, ircmsgs.unbans(channel, bans))
+        elif hostmask:
             self._sendMsg(irc, ircmsgs.unban(channel, hostmask))
         else:
             bans = []
@@ -426,7 +435,18 @@ class Channel(callbacks.Plugin):
                           (msg.prefix, channel))
     unban = wrap(unban, ['op',
                          ('isGranted', _('unban someone')),
-                         additional('hostmask')])
+                         additional(
+                             first('hostmask',
+                                 ('literal', '--all')))])
+
+    @internationalizeDocstring
+    def listbans(self, irc, msg, args, channel):
+        """[<channel>]
+
+        List all bans on the channel.
+        If <channel> is not given, it defaults to the current channel."""
+        irc.replies(irc.state.channels[channel].bans or [_('No bans.')])
+    listbans = wrap(listbans, ['channel'])
 
     @internationalizeDocstring
     def invite(self, irc, msg, args, channel, nick):

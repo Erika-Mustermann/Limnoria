@@ -158,7 +158,7 @@ class MessageParser(callbacks.Plugin, plugins.ChannelDBHandler):
                 return
             actions = []
             results = []
-            for channel in (channel, 'global'):
+            for channel in set(map(plugins.getChannel, (channel, 'global'))):
                 db = self.getDb(channel)
                 cursor = db.cursor()
                 cursor.execute("SELECT regexp, action FROM triggers")
@@ -167,6 +167,7 @@ class MessageParser(callbacks.Plugin, plugins.ChannelDBHandler):
                 results.extend(map(lambda x: (channel,)+x, cursor.fetchall()))
             if len(results) == 0:
                 return
+            max_triggers = self.registryValue('maxTriggers', channel)
             for (channel, regexp, action) in results:
                 for match in re.finditer(regexp, msg.args[1]):
                     if match is not None:
@@ -175,6 +176,11 @@ class MessageParser(callbacks.Plugin, plugins.ChannelDBHandler):
                         for (i, j) in enumerate(match.groups()):
                             thisaction = re.sub(r'\$' + str(i+1), match.group(i+1), thisaction)
                         actions.append(thisaction)
+                        if max_triggers != 0 and max_triggers == len(actions):
+                            break
+                if max_triggers != 0 and max_triggers == len(actions):
+                    break
+
 
             for action in actions:
                 self._runCommandFunction(irc, msg, action)
@@ -381,7 +387,7 @@ class MessageParser(callbacks.Plugin, plugins.ChannelDBHandler):
         """
         db = self.getDb(channel)
         cursor = db.cursor()
-        cursor.execute("SELECT regexp, id FROM triggers")
+        cursor.execute("SELECT regexp, id FROM triggers ORDER BY id")
         results = cursor.fetchall()
         if len(results) != 0:
             regexps = results

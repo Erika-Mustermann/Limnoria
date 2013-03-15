@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2002-2005, Jeremiah Fincher
-# Copyright (c) 2011, James Vega
+# Copyright (c) 2011, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -113,6 +113,34 @@ class SupyTestCase(unittest.TestCase):
     def tearDown(self):
         for irc in world.ircs[:]:
             irc._reallyDie()
+
+    if sys.version_info < (2, 7, 0):
+        def assertIn(self, member, container, msg=None):
+            """Just like self.assertTrue(a in b), but with a nicer default message."""
+            if member not in container:
+                standardMsg = '%s not found in %s' % (safe_repr(member),
+                                                      safe_repr(container))
+                self.fail(self._formatMessage(msg, standardMsg))
+
+        def assertNotIn(self, member, container, msg=None):
+            """Just like self.assertTrue(a not in b), but with a nicer default message."""
+            if member in container:
+                standardMsg = '%s unexpectedly found in %s' % (safe_repr(member),
+                                                            safe_repr(container))
+                self.fail(self._formatMessage(msg, standardMsg))
+
+        def assertIs(self, expr1, expr2, msg=None):
+            """Just like self.assertTrue(a is b), but with a nicer default message."""
+            if expr1 is not expr2:
+                standardMsg = '%s is not %s' % (safe_repr(expr1),
+                                                 safe_repr(expr2))
+                self.fail(self._formatMessage(msg, standardMsg))
+
+        def assertIsNot(self, expr1, expr2, msg=None):
+            """Just like self.assertTrue(a is not b), but with a nicer default message."""
+            if expr1 is expr2:
+                standardMsg = 'unexpectedly identical: %s' % (safe_repr(expr1),)
+                self.fail(self._formatMessage(msg, standardMsg))
 
 
 class PluginTestCase(SupyTestCase):
@@ -228,7 +256,7 @@ class PluginTestCase(SupyTestCase):
         if not usePrefixChar and query[0] in prefixChars:
             query = query[1:]
         if sys.version_info[0] < 3:
-            query = query.encode('utf8', errors='replace') # unicode->str
+            query = query.encode('utf8') # unicode->str
         msg = ircmsgs.privmsg(to, query, prefix=frm)
         if self.myVerbose:
             print 'Feeding: %r' % msg
@@ -401,6 +429,9 @@ class ChannelPluginTestCase(PluginTestCase):
         self.assertEqual(m.command, 'MODE')
         m = self.irc.takeMsg()
         self.failIf(m is None, 'No message back from joining channel.')
+        self.assertEqual(m.command, 'MODE')
+        m = self.irc.takeMsg()
+        self.failIf(m is None, 'No message back from joining channel.')
         self.assertEqual(m.command, 'WHO')
 
     def _feedMsg(self, query, timeout=None, to=None, frm=None, private=False,
@@ -419,8 +450,8 @@ class ChannelPluginTestCase(PluginTestCase):
         prefixChars = conf.supybot.reply.whenAddressedBy.chars()
         if query[0] not in prefixChars and usePrefixChar:
             query = prefixChars[0] + query
-        if sys.version_info[0] < 3:
-            query = query.encode('utf8', errors='replace') # unicode->str
+        if sys.version_info[0] < 3 and isinstance(query, unicode):
+            query = query.encode('utf8') # unicode->str
         msg = ircmsgs.privmsg(to, query, prefix=frm)
         if self.myVerbose:
             print 'Feeding: %r' % msg
@@ -462,14 +493,6 @@ class ChannelPluginTestCase(PluginTestCase):
             frm = self.prefix
         self.irc.feedMsg(ircmsgs.privmsg(to, query, prefix=frm))
 
-class TestSupyHTTPServer(httpserver.SupyHTTPServer):
-    def __init__(self, *args, **kwargs):
-        pass
-    def serve_forever(self, *args, **kwargs):
-        pass
-    def shutdown(self, *args, **kwargs):
-        pass
-
 class TestRequestHandler(httpserver.SupyHTTPRequestHandler):
     def __init__(self, rfile, wfile, *args, **kwargs):
         self._headers_mode = True
@@ -488,10 +511,12 @@ class TestRequestHandler(httpserver.SupyHTTPRequestHandler):
         self._headers_mode = False
 
     def do_X(self, *args, **kwargs):
-        assert httpserver.httpServer is not None, \
+        assert httpserver.http_servers, \
                 'The HTTP server is not started.'
-        self.server = httpserver.httpServer
+        self.server = httpserver.http_servers[0]
         httpserver.SupyHTTPRequestHandler.do_X(self, *args, **kwargs)
+
+httpserver.http_servers = [httpserver.TestSupyHTTPServer()]
 
 # Partially stolen from the standart Python library :)
 def open_http(url, data=None):
@@ -559,7 +584,6 @@ class FakeHTTPConnection(httplib.HTTPConnection):
         httplib.HTTPConnection.__init__(self, 'localhost')
         self.rfile = rfile
         self.wfile = wfile
-        self.connect()
     def send(self, data):
         self.wfile.write(data)
     #def putheader(self, name, value):

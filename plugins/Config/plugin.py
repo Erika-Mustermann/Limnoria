@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2002-2005, Jeremiah Fincher
-# Copyright (c) 2009, James Vega
+# Copyright (c) 2009, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -284,6 +284,15 @@ class Config(callbacks.Plugin):
         irc.replySuccess()
     export = wrap(export, [('checkCapability', 'owner'), 'filename'])
 
+    @internationalizeDocstring
+    def setdefault(self, irc, msg, args, group):
+        """<name>
+
+        Resets the configuration variable <name> to its default value.
+        """
+        v = str(group.__class__(group._default, ''))
+        self._setValue(irc, msg, group, v)
+    setdefault = wrap(setdefault, ['settableConfigVar'])
 
 Class = Config
 

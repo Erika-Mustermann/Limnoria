@@ -1,6 +1,6 @@
 ###
 # Copyright (c) 2002-2005, Jeremiah Fincher
-# Copyright (c) 2008-2009,2011, James Vega
+# Copyright (c) 2008-2009,2011, James McCoy
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -291,13 +291,13 @@ def registerNetwork(name, password='', ssl=False, sasl_username='',
         completed.""") % name))
     registerGlobalValue(network, 'channels', SpaceSeparatedSetOfChannels([],
         _("""Determines what channels the bot will join only on %s.""") %
-        name))
+        name, private=True))
     registerGlobalValue(network, 'ssl', registry.Boolean(ssl,
         _("""Determines whether the bot will attempt to connect with SSL
         sockets to %s.""") % name))
     registerChannelValue(network.channels, 'key', registry.String('',
         _("""Determines what key (if any) will be used to join the
-        channel.""")))
+        channel."""), private=True))
     registerGlobalValue(network, 'nick', ValidNickOrEmpty('', _("""Determines
         what nick the bot will use on this network. If empty, defaults to
         supybot.nick.""")))
@@ -789,6 +789,9 @@ registerGlobalValue(supybot.directories, 'backup',
 registerGlobalValue(supybot.directories.data, 'tmp',
     DataFilenameDirectory('tmp', _("""Determines what directory temporary files
     are put into.""")))
+registerGlobalValue(supybot.directories.data, 'web',
+    DataFilenameDirectory('web', _("""Determines what directory files of the
+    web server (templates, custom images, ...) are put into.""")))
 
 utils.file.AtomicFile.default.tmpDir = supybot.directories.data.tmp
 utils.file.AtomicFile.default.backupDir = supybot.directories.backup
@@ -1113,9 +1116,6 @@ registerGlobalValue(supybot.servers.http, 'keepAlive',
     registry.Boolean(False, _("""Determines whether the server will stay
     alive if no plugin is using it. This also means that the server will
     start even if it is not used.""")))
-registerGlobalValue(supybot.servers.http, 'robots',
-    registry.String('', _("""Determines the content of the robots.txt file,
-    served on the server to search engine.""")))
 registerGlobalValue(supybot.servers.http, 'favicon',
     registry.String('', _("""Determines the path of the file served as
     favicon to browsers.""")))
