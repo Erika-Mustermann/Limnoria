@@ -278,14 +278,14 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
         # At least 10 seconds.
         self.conn.settimeout(max(10, conf.supybot.drivers.poll()*10))
         try:
+            if getattr(conf.supybot.networks, self.irc.network).ssl():
+                assert globals().has_key('ssl')
+                self.conn = ssl.wrap_socket(self.conn)
             self.conn.connect(server)
             def setTimeout():
                 self.conn.settimeout(conf.supybot.drivers.poll())
             conf.supybot.drivers.poll.addCallback(setTimeout)
             setTimeout()
-            if getattr(conf.supybot.networks, self.irc.network).ssl():
-                assert globals().has_key('ssl')
-                self.conn = ssl.wrap_socket(self.conn)
             self.connected = True
             self.resetDelay()
         except socket.error, e:
@@ -337,7 +337,6 @@ class SocketDriver(drivers.IrcDriver, drivers.ServersMixin):
 
     def _reallyDie(self):
         if self.conn is not None:
-            self.conn.shutdown(socket.SHUT_RDWR)
             self.conn.close()
         drivers.IrcDriver.die(self)
         # self.irc.die() Kill off the ircs yourself, jerk!

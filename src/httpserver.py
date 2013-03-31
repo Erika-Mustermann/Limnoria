@@ -216,7 +216,7 @@ class SupyHTTPRequestHandler(BaseHTTPRequestHandler):
         # We call doX, because this is more supybotic than do_X.
         path = self.path
         if not callback.fullpath:
-            path = '/' + path.split('/', 2)[2]
+            path = '/' + path.split('/', 2)[-1]
         getattr(callback, callbackMethod)(self, path,
                 *args, **kwargs)
 
@@ -257,7 +257,7 @@ class SupyHTTPServerCallback:
         self.send_header('Content_type', 'text/plain; charset=utf-8')
         self.send_header('Content-Length', len(self.defaultResponse))
         self.end_headers()
-        self.wfile.write(self.defaultResponse)
+        self.wfile.write(self.defaultResponse.encode())
 
     doPost = doHead = doGet
 
@@ -279,7 +279,7 @@ class Supy404(SupyHTTPServerCallback):
         self.send_header('Content_type', 'text/plain; charset=utf-8')
         self.send_header('Content-Length', len(self.response))
         self.end_headers()
-        self.wfile.write(self.response)
+        self.wfile.write(self.response.encode())
 
     doPost = doHead = doGet
 
@@ -346,7 +346,7 @@ class Favicon(SupyHTTPServerCallback):
             self.send_header('Content-type', 'text/plain')
             self.send_header('Content-Length', len(response))
             self.end_headers()
-            self.wfile.write(response)
+            self.wfile.write(response.encode())
 
 http_servers = None
 
