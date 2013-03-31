@@ -1,3 +1,4 @@
+# -*- coding: utf8 -*-
 ###
 # Copyright (c) 2005, Jeremiah Fincher
 # Copyright (c) 2009, James McCoy
@@ -28,55 +29,139 @@
 # POSSIBILITY OF SUCH DAMAGE.
 ###
 
+import os
 import re
-import sys
-import HTMLParser
-import htmlentitydefs
-
+import sqlite3
+import urlparse
+#from urllib import quote
+from contextlib import closing
 import supybot.conf as conf
+import supybot.ircdb as ircdb
 import supybot.utils as utils
 from supybot.commands import *
+import supybot.ircmsgs as ircmsgs
 import supybot.plugins as plugins
 import supybot.ircutils as ircutils
 import supybot.callbacks as callbacks
-from supybot.i18n import PluginInternationalization, internationalizeDocstring
-_ = PluginInternationalization('Web')
+# TODO: Make BeautifulSoup 4 optional through config?
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    raise callbacks.Error, 'You need to have Beautiful Soup 4 installed ' \
+                           'to use this plugin.  Download it at ' \
+                           '<https://pypi.python.org/pypi/beautifulsoup4>'
+try:
+    from supybot.i18n import PluginInternationalization, \
+                             internationalizeDocstring
+    _ = PluginInternationalization('MessageParser')
+except:
+    # This are useless functions that's allow to run the plugin on a bot
+    # without the i18n plugin
+    _ = lambda x:x
+    internationalizeDocstring = lambda x:x
 
-class Title(HTMLParser.HTMLParser):
-    entitydefs = htmlentitydefs.entitydefs.copy()
-    entitydefs['nbsp'] = ' '
-    entitydefs['apos'] = '\''
-    def __init__(self):
-        self.inTitle = False
-        self.title = ''
-        HTMLParser.HTMLParser.__init__(self)
 
-    def handle_starttag(self, tag, attrs):
-        if tag == 'title':
-            self.inTitle = True
-
-    def handle_endtag(self, tag):
-        if tag == 'title':
-            self.inTitle = False
-
-    def handle_data(self, data):
-        if self.inTitle:
-            self.title += data
-
-    def handle_entityref(self, name):
-        if self.inTitle:
-            if name in self.entitydefs:
-                self.title += self.entitydefs[name]
-
-class Web(callbacks.PluginRegexp):
+class Web(callbacks.PluginRegexp, plugins.ChannelDBHandler):
     """Add the help for "@help Web" here."""
     threaded = True
+    flags = re.IGNORECASE|re.VERBOSE
     regexps = ['titleSnarfer']
+    def __init__(self, irc):
+        self.__parent = super(Web, self)
+        self.__parent.__init__(irc)
+        callbacks.PluginRegexp.__init__(self, irc)
+        plugins.ChannelDBHandler.__init__(self)
+
+    def makeDb(self, filename):
+        """Create the database and connect to it."""
+        if os.path.exists(filename):
+            db = sqlite3.connect(filename)
+            db.text_factory = str
+            return db
+        db = sqlite3.connect(filename)
+        db.text_factory = str
+        cursor = db.cursor()
+        cursor.execute("""CREATE TABLE IF NOT EXISTS urls (
+                          url TEXT PRIMARY KEY,
+                          nick TEXT,
+                          channel TEXT,
+                          message TEXT,
+                          timestamp TIMESTAMP
+                          )""")
+        db.commit()
+        return db
+
+    def _updateDB(self, msg, url):
+        """Record when this URL was seen."""
+        if url.endswith('/'):
+            url = url[:-1]
+        if ircmsgs.isAction(msg):
+            text = ircmsgs.unAction(msg)
+        else:
+            text = msg.args[1]
+        db = self.getDb(msg.args[0])
+        cursor = db.cursor()
+        linked = cursor.execute('SELECT nick, channel, message, timestamp FROM urls WHERE url = ?', (url,)).fetchone()
+        if linked:
+            return {'nick': linked[0], 'channel': linked[1], 'timestamp': linked[3]}
+        else:
+            cursor.execute('INSERT OR IGNORE INTO urls (url, nick, channel, message, timestamp) VALUES (?,?,?,?,?)', (
+                url, msg.nick, msg.args[0], text, msg.receivedAt))
+            db.commit()
+            self.log.debug('Adding %u to db.', url)
+            return None
+
+    def _countDB(self, channel):
+        """Return number of URLs in database"""
+        db = self.getDb(channel)
+        cursor = db.cursor()
+        rowCount = cursor.execute('SELECT COUNT(*) FROM urls').fetchone()
+        return rowCount[0]
+
     def callCommand(self, command, irc, msg, *args, **kwargs):
         try:
             super(Web, self).callCommand(command, irc, msg, *args, **kwargs)
         except utils.web.Error, e:
             irc.reply(str(e))
+
+    _WebRe = r"""
+              \b
+              (                       # Capture 1: entire matched URL
+              (?:
+                  https?://               # http or https protocol
+                  |                       #   or
+                  www\d{0,3}[.]           # "www.", "www1.", "www2." … "www999."
+                  |                           #   or
+                  [a-z0-9.\-]+[.][a-z]{2,4}/  # looks like domain name followed by a slash
+              )
+              (?:                       # One or more:
+                  [^\s()<>]+                  # Run of non-space, non-()<>
+                  |                           #   or
+                  \(([^\s()<>]+|(\([^\s()<>]+\)))*\)  # balanced parens, up to 2 levels
+              )+
+              (?:                       # End with:
+                  \(([^\s()<>]+|(\([^\s()<>]+\)))*\)  # balanced parens, up to 2 levels
+                  |                               #   or
+                  [^\s`!()\[\]{};:'".,<>?«»“”‘’]        # not a space or one of these punct chars
+              )
+              )"""
+
+    # TODO: More accurate times, but may not be worth effort
+    def elapsed(current_time, timestamp):
+        """Returns a nice approximation of elapsed time"""
+        secs = int(current_time-timestamp)
+        if secs < 60:
+            return '%ds' % secs
+        elif secs < 3600:
+            return '%dm' % (secs // 60)
+        elif secs < 86400:
+            return '%dh' % (secs // 3600)
+        else:
+            return '%dd' % (secs // 86400)
+
+    # TODO: add code that would be common to titleSnarfer and @title
+    def _urlParser(self, msg, url):
+        pass
 
     def titleSnarfer(self, irc, msg, match):
         channel = msg.args[0]
@@ -84,38 +169,76 @@ class Web(callbacks.PluginRegexp):
             return
         if callbacks.addressed(irc.nick, msg):
             return
-        if self.registryValue('titleSnarfer', channel):
-            url = match.group(0)
-            r = self.registryValue('nonSnarfingRegexp', channel)
-            if r and r.search(url):
-                self.log.debug('Not titleSnarfing %q.', url)
-                return
-            try:
-                size = conf.supybot.protocols.http.peekSize()
-                text = utils.web.getUrl(url, size=size)
-                if sys.version_info[0] >= 3:
-                    text = text.decode('utf8', 'replace')
-            except utils.web.Error, e:
-                self.log.info('Couldn\'t snarf title of %u: %s.', url, e)
-                return
-            parser = Title()
-            try:
-                parser.feed(text)
-            except HTMLParser.HTMLParseError:
-                self.log.debug('Encountered a problem parsing %u.  Title may '
-                               'already be set, though', url)
-            if parser.title:
-                domain = utils.web.getDomain(url)
-                title = utils.web.htmlToText(parser.title.strip())
-                if sys.version_info[0] < 3:
-                    try:
-                        title = title.encode('utf8', 'replace')
-                    except UnicodeDecodeError:
-                        pass
-                s = format(_('Title: %s (at %s)'), title, domain)
-                irc.reply(s, prefixNick=False)
+        if not self.registryValue('titleSnarfer', channel):
+            return
+        url = urlparse.urlsplit(match.group(0)).geturl() # lowercases scheme
+        r = self.registryValue('nonSnarfingRegexp', channel)
+        if r and r.search(url):
+            self.log.debug('Not titleSnarfing %q.', url)
+            return
+
+        size = conf.supybot.protocols.http.peekSize()
+        headers = {'User-Agent':'Mozilla/5.0 (Windows NT 6.1; rv:20.0) \
+                    Gecko/20100101 Firefox/20.0'}
+        if not url.startswith(('http://', 'https://')):
+            url = 'http://%s' % url # prevents dupes in db & errors in netloc
+        urlP = urlparse.urlsplit(url)
+        url = urlP.geturl()
+        origDomain = urlP.hostname
+        try:
+            url = url.decode('ascii')
+        except UnicodeDecodeError:  # Process unicode URLs into IDN
+            # netloc2 = [username] @ [password] : <hostname> : [port]
+            netloc2 = ''
+            if (urlP.username):
+                netloc2 =  '%s@' % urlP.username
+                if (urlP.password):
+                    netloc2 =  '%s:%s@' % (netloc2[:-1], urlP.password)
+            netloc2 = netloc2 + urlP.hostname.decode('utf8').encode('idna')
+            if (urlP.port):
+                netloc2 += ':%s' % urlP.port
+            url = urlparse.urlunsplit((urlP.scheme, netloc2, urlP.path,
+                                      urlP.query, urlP.fragment))
+            self.log.debug('Unicode URL: %u', url)
+
+        # TODO: add support for auth to getUrlFd
+        with closing(utils.web.getUrlFd(url, headers)) as urlFd:
+            contType = urlFd.info().gettype()
+            title = None
+            if contType in ('text/html', 'text/xml', 'application/xml',
+                            'application/xhtml+xml'):
+                title = BeautifulSoup(urlFd.read(size)).title.string
+                contType = 'html'
+            destUrl = urlFd.geturl()
+            destDomain = urlparse.urlsplit(destUrl).hostname
+        linked = self._updateDB(msg, url) # after with closing = only links that resolve added to db
+
+        if title:
+            title = (' '.join(title.split())) # removes possible new lines
+            title = u'{0}{1}'.format(title[:150], (title[150:] and '...'))
+            if origDomain == destDomain:
+#                s = 'Title: %s' % title    # Doesn't require u''
+                s = u'Title: {0}'.format(title)
+            else:
+                s = u'Title: {0} ({1})'.format(title, destDomain)
+        else:
+            if contType != 'html':
+                if origDomain == destDomain:
+                    self.log.info('Couldn\'t snarf title of %u: %s.', url,
+                                  'URL is not a webpage')
+                    return
+                else:
+                    s = 'Redirects to: {0}'.format(destUrl)
+            else:
+                s = 'Untitled ({0})'.format(destDomain)
+        irc.reply(s, prefixNick=False)
+        if linked:
+            elapsedTime = elapsed(msg.receivedAt, linked['timestamp'])
+            irc.reply(('(First linked by %s in %s, %s ago.)' % (linked['nick'],
+                       linked['channel'], elapsedTime)), prefixNick=False)
+#            self.log.debug('Msg: %s' % linked['message'])
     titleSnarfer = urlSnarfer(titleSnarfer)
-    titleSnarfer.__doc__ = utils.web._httpUrlRe
+    titleSnarfer.__doc__ = _WebRe
 
     @internationalizeDocstring
     def headers(self, irc, msg, args, url):
@@ -124,6 +247,7 @@ class Web(callbacks.PluginRegexp):
         Returns the HTTP headers of <url>.  Only HTTP urls are valid, of
         course.
         """
+        # TODO: replace try/except with "with closing()"
         fd = utils.web.getUrlFd(url)
         try:
             s = ', '.join([format(_('%s: %s'), k, v)
@@ -159,6 +283,7 @@ class Web(callbacks.PluginRegexp):
         Returns the Content-Length header of <url>.  Only HTTP urls are valid,
         of course.
         """
+        # TODO: replace try/except with "with closing()"
         fd = utils.web.getUrlFd(url)
         try:
             try:
@@ -185,6 +310,7 @@ class Web(callbacks.PluginRegexp):
         If --no-filter is given, the bot won't strip special chars (action,
         DCC, ...).
         """
+        # TODO: rewrite to support _urlParser()
         size = conf.supybot.protocols.http.peekSize()
         text = utils.web.getUrl(url, size=size)
         try:
@@ -210,6 +336,17 @@ class Web(callbacks.PluginRegexp):
                              'within the first %S.'), size))
     title = wrap(title, [getopts({'no-filter': ''}), 'httpUrl'])
 
+    @internationalizeDocstring
+    def stats(self, irc, msg, args, channel):
+        """[<channel>]
+
+        Returns the number of URLs in the Web database.  <channel> is only
+        required if the message isn't sent in the channel itself.
+        """
+        count = self._countDB(channel)
+        irc.reply(format(_('I have %n in my database.'), (count, 'link')))
+    stats = wrap(stats, ['channeldb'])
+    
     @internationalizeDocstring
     def urlquote(self, irc, msg, args, text):
         """<text>
@@ -246,6 +383,65 @@ class Web(callbacks.PluginRegexp):
                         .decode('utf8')
         irc.reply(fd)
     fetch = wrap(fetch, ['url'])
+    
+    # TODO: make compatible with sqlite3 database
+    @internationalizeDocstring
+    def last(self, irc, msg, args, channel, optlist):
+        """[<channel>] [--{from,with,without,near,proto} <value>] [--nolimit]
+
+        Gives the last URL matching the given criteria.  --from is from whom
+        the URL came; --proto is the protocol the URL used; --with is something
+        inside the URL; --without is something that should not be in the URL;
+        --near is something in the same message as the URL.  If --nolimit is
+        given, returns all the URLs that are found to just the URL.
+        <channel> is only necessary if the message isn't sent in the channel
+        itself.
+        """
+        predicates = []
+        f = None
+        nolimit = False
+        for (option, arg) in optlist:
+            if isinstance(arg, basestring):
+                arg = arg.lower()
+            if option == 'nolimit':
+                nolimit = True
+            elif option == 'from':
+                def f(record, arg=arg):
+                    return ircutils.strEqual(record.by, arg)
+            elif option == 'with':
+                def f(record, arg=arg):
+                    return arg in record.url.lower()
+            elif option == 'without':
+                def f(record, arg=arg):
+                    return arg not in record.url.lower()
+            elif option == 'proto':
+                def f(record, arg=arg):
+                    return record.url.lower().startswith(arg)
+            elif option == 'near':
+                def f(record, arg=arg):
+                    return arg in record.near.lower()
+            if f is not None:
+                predicates.append(f)
+        def predicate(record):
+            for predicate in predicates:
+                if not predicate(record):
+                    return False
+            return True
+        urls = [record.url for record in self.db.urls(channel, predicate)]
+        if not urls:
+            irc.reply(_('No URLs matched that criteria.'))
+        else:
+            if nolimit:
+                urls = [format('%u', url) for url in urls]
+                s = ', '.join(urls)
+            else:
+                # We should optimize this with another URLDB method eventually.
+                s = urls[0]
+            irc.reply(s)
+    last = wrap(last, ['channeldb',
+                       getopts({'from': 'something', 'with': 'something',
+                                'near': 'something', 'proto': 'something',
+                                'nolimit': '', 'without': 'something',})])
 
 Class = Web
 
