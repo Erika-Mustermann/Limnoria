@@ -101,12 +101,16 @@ class Web(callbacks.PluginRegexp, plugins.ChannelDBHandler):
             text = msg.args[1]
         db = self.getDb(msg.args[0])
         cursor = db.cursor()
-        linked = cursor.execute('SELECT nick, channel, message, timestamp FROM urls WHERE url = ?', (url,)).fetchone()
+        linked = cursor.execute("""SELECT nick, channel, message, timestamp
+                                   FROM urls WHERE url = ?""",
+                                   (url,)).fetchone()
         if linked:
-            return {'nick': linked[0], 'channel': linked[1], 'timestamp': linked[3]}
+            return {'nick': linked[0], 'channel': linked[1],
+                    'timestamp': linked[3]}
         else:
-            cursor.execute('INSERT OR IGNORE INTO urls (url, nick, channel, message, timestamp) VALUES (?,?,?,?,?)', (
-                url, msg.nick, msg.args[0], text, msg.receivedAt))
+            cursor.execute("""INSERT OR IGNORE INTO urls (url, nick, channel,
+                              message, timestamp) VALUES (?,?,?,?,?)""",
+                              (url, msg.nick, msg.args[0], text, msg.receivedAt))
             db.commit()
             self.log.debug('Adding %u to db.', url)
             return None
@@ -211,10 +215,12 @@ class Web(callbacks.PluginRegexp, plugins.ChannelDBHandler):
                 contType = 'html'
             destUrl = urlFd.geturl()
             destDomain = urlparse.urlsplit(destUrl).hostname
-        linked = self._updateDB(msg, url) # after with closing = only links that resolve added to db
+        # after with closing() = only links that resolve are added to db
+        linked = self._updateDB(msg, url)
 
         if title:
-            title = (' '.join(title.split())).encode('utf8') # removes possible new lines and white spaces
+            # removes possible new lines and white spaces
+            title = (' '.join(title.split())).encode('utf8')
             # TODO: give option for title string length limit
             title = '{0}{1}'.format(title[:150], (title[150:] and '...'))
             if origDomain == destDomain:
