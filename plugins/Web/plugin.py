@@ -214,13 +214,14 @@ class Web(callbacks.PluginRegexp, plugins.ChannelDBHandler):
         linked = self._updateDB(msg, url) # after with closing = only links that resolve added to db
 
         if title:
-            title = (' '.join(title.split())) # removes possible new lines
-            title = u'{0}{1}'.format(title[:150], (title[150:] and '...'))
+            title = (' '.join(title.split())).encode('utf8') # removes possible new lines and white spaces
+            # TODO: give option for title string length limit
+            title = '{0}{1}'.format(title[:150], (title[150:] and '...'))
             if origDomain == destDomain:
 #                s = 'Title: %s' % title    # Doesn't require u''
-                s = u'Title: {0}'.format(title)
+                s = 'Title: {0}'.format(title)
             else:
-                s = u'Title: {0} ({1})'.format(title, destDomain)
+                s = 'Title: {0} ({1})'.format(title, destDomain)
         else:
             if contType != 'html':
                 if origDomain == destDomain:
