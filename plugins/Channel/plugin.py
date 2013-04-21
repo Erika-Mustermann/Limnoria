@@ -644,7 +644,7 @@ class Channel(callbacks.Plugin):
                 irc.replySuccess()
             except KeyError:
                 irc.error(_('There are no ignores for that hostmask.'))
-        remove = wrap(remove, ['op', 'hostmask'])
+        remove = wrap(remove, ['op', 'banmask'])
 
         @internationalizeDocstring
         def list(self, irc, msg, args, channel):
