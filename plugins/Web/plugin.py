@@ -150,18 +150,19 @@ class Web(callbacks.PluginRegexp, plugins.ChannelDBHandler):
               )
               )"""
 
-    # TODO: More accurate times, but may not be worth effort
-    def elapsed(current_time, timestamp):
+    def _elapsed(self, current_time, timestamp):
         """Returns a nice approximation of elapsed time"""
-        secs = int(current_time-timestamp)
-        if secs < 60:
-            return '%ds' % secs
-        elif secs < 3600:
-            return '%dm' % (secs // 60)
-        elif secs < 86400:
-            return '%dh' % (secs // 3600)
-        else:
-            return '%dd' % (secs // 86400)
+        delta = int(current_time-timestamp)
+        seconds = minutes = hours = True
+        if delta > 60:
+            seconds = False
+        if delta > 3600:
+            minutes = False
+        if delta > 86400:
+            hours = False
+        return utils.timeElapsed(delta, short=False, leadingZeroes=False,
+                                 years=True, weeks=True, days=True,
+                                 hours, minutes, seconds)
 
     # TODO: add code that would be common to titleSnarfer and @title
     def _urlParser(self, msg, url):
@@ -181,38 +182,44 @@ class Web(callbacks.PluginRegexp, plugins.ChannelDBHandler):
             self.log.debug('Not titleSnarfing %q.', url)
             return
 
-        size = conf.supybot.protocols.http.peekSize()
-        headers = {'User-Agent':'Mozilla/5.0 (Windows NT 6.1; rv:20.0) \
-                    Gecko/20100101 Firefox/20.0'}
         if not url.startswith(('http://', 'https://')):
-            url = 'http://%s' % url # prevents dupes in db & errors in netloc
+            # prevents dupes in db & errors in netloc
+            url = 'http://{0:s}'.format(url)
         urlP = urlparse.urlsplit(url)
         url = urlP.geturl()
         origDomain = urlP.hostname
         try:
             url = url.decode('ascii')
-        except UnicodeDecodeError:  # Process unicode URLs into IDN
+        except UnicodeDecodeError:  # Process Unicode URLs into IDN
             # netloc2 = [username] @ [password] : <hostname> : [port]
             netloc2 = ''
             if (urlP.username):
-                netloc2 =  '%s@' % urlP.username
+                netloc2 = '{0:s}@'.format(urlP.username)
                 if (urlP.password):
-                    netloc2 =  '%s:%s@' % (netloc2[:-1], urlP.password)
+                    netloc2 = '{0:s}:{1:s}@'.format((netloc2[:-1],
+                                                     urlP.password))
             netloc2 = netloc2 + urlP.hostname.decode('utf8').encode('idna')
             if (urlP.port):
-                netloc2 += ':%s' % urlP.port
+                netloc2 += ':{0:d}'.format(urlP.port)
             url = urlparse.urlunsplit((urlP.scheme, netloc2, urlP.path,
-                                      urlP.query, urlP.fragment))
+                                       urlP.query, urlP.fragment))
             self.log.debug('Unicode URL: %u', url)
 
+        size = conf.supybot.protocols.http.peekSize()
+        headers = {'User-Agent':'Mozilla/5.0 (Windows NT 6.1; rv:20.0) \
+                    Gecko/20100101 Firefox/20.0'}
         # TODO: add support for auth to getUrlFd
         with closing(utils.web.getUrlFd(url, headers)) as urlFd:
             contType = urlFd.info().gettype()
-            title = None
+            body = title = None
             if contType in ('text/html', 'text/xml', 'application/xml',
                             'application/xhtml+xml'):
-                title = BeautifulSoup(urlFd.read(size)).title.string
                 contType = 'html'
+                soup = BeautifulSoup(urlFd.read(size))
+                if soup.body:
+                    body = soup.body.name
+                if soup.title:
+                    title = soup.title.string
             destUrl = urlFd.geturl()
             destDomain = urlparse.urlsplit(destUrl).hostname
         # after with closing() = only links that resolve are added to db
@@ -222,27 +229,31 @@ class Web(callbacks.PluginRegexp, plugins.ChannelDBHandler):
             # removes possible new lines and white spaces
             title = (' '.join(title.split())).encode('utf8')
             # TODO: give option for title string length limit
-            title = '{0}{1}'.format(title[:150], (title[150:] and '...'))
+            title = '{0:s}{1:s}'.format(title[:150], (title[150:] and '...'))
             if origDomain == destDomain:
-#                s = 'Title: %s' % title    # Doesn't require u''
-                s = 'Title: {0}'.format(title)
+                s = 'Title: {0:s}'.format(title)
             else:
-                s = 'Title: {0} ({1})'.format(title, destDomain)
+                s = 'Title: {0:s} ({1:s})'.format(title, destDomain)
         else:
             if contType != 'html':
                 if origDomain == destDomain:
-                    self.log.info('Couldn\'t snarf title of %u: %s.', url,
-                                  'URL is not a webpage')
+                    self.log.info('Couldn\'t snarf title of %u: URL is not \
+                                   a webpage.', url)
                     return
                 else:
-                    s = 'Redirects to: {0}'.format(destUrl)
+                    s = 'Redirects to: {0:s}'.format(destUrl)
+            if body:
+                s = 'Untitled ({0:s})'.format(destDomain)
             else:
-                s = 'Untitled ({0})'.format(destDomain)
+                self.log.info('%u appears to have no HTML title within the \
+                               first %S.', url, size)
+                return
         irc.reply(s, prefixNick=False)
         if linked:
-            elapsedTime = elapsed(msg.receivedAt, linked['timestamp'])
-            irc.reply(('(First linked by %s in %s, %s ago.)' % (linked['nick'],
-                       linked['channel'], elapsedTime)), prefixNick=False)
+            elapsedTime = self._elapsed(msg.receivedAt, linked['timestamp'])
+            irc.reply(('(First linked by {0:s} in {1:s}, {2:s} ago.)'\
+                     .format(linked['nick'], linked['channel'], elapsedTime)),
+                             prefixNick=False)
 #            self.log.debug('Msg: %s' % linked['message'])
     titleSnarfer = urlSnarfer(titleSnarfer)
     titleSnarfer.__doc__ = _WebRe
