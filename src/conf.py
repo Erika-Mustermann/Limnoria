@@ -315,7 +315,7 @@ def registerNetwork(name, password='', ssl=False, sasl_username='',
         % name, private=True))
     registerGlobalValue(network, 'socksproxy', registry.String('',
         _("""If not empty, determines the hostname of the socks proxy that
-        will be used to connect to this network.""")))
+        will be used to connect to this network."""), private=True))
     return network
 
 # Let's fill our networks.
@@ -1085,7 +1085,7 @@ registerGlobalValue(supybot.protocols.http, 'peekSize',
 
 registerGlobalValue(supybot.protocols.http, 'proxy',
     registry.String('', _("""Determines what proxy all HTTP requests should go
-    through.  The value should be of the form 'host:port'.""")))
+    through.  The value should be of the form 'host:port'."""), private=True))
 utils.web.proxy = supybot.protocols.http.proxy
 
 
