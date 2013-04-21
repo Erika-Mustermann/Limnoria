@@ -108,6 +108,11 @@ def getUrlFd(url, headers=None, data=None):
     if headers is None:
         headers = defaultHeaders
     try:
+        opener = urllib2.build_opener()
+        httpProxy = force(proxy)
+        if httpProxy:
+            proxy_handler = urllib2.ProxyHandler({'http': httpProxy, 'https': httpProxy})
+            opener = urllib2.build_opener(proxy_handler)
         if not isinstance(url, urllib2.Request):
             if '#' in url:
                 url = url[:url.index('#')]
@@ -122,10 +127,7 @@ def getUrlFd(url, headers=None, data=None):
         else:
             request = url
             request.add_data(data)
-        httpProxy = force(proxy)
-        if httpProxy:
-            request.set_proxy(httpProxy, 'http')
-        fd = urllib2.urlopen(request)
+        fd = opener.open(request)
         return fd
     except socket.timeout, e:
         raise Error, TIMED_OUT
